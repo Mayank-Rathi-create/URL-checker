@@ -292,90 +292,6 @@ def analyze_url(raw_url: str, link_text: str, source: str) -> Analysis:
 
     return result
 
-
-# --------------------------------------------------------------------------- #
-# Online scanners (optional)
-# --------------------------------------------------------------------------- #
-
-def virustotal_scan(url: str, api_key: str, max_wait: int = 45) -> dict:
-    """Return VirusTotal analysis stats for the URL (looks up first, submits if unknown)."""
-    headers = {"x-apikey": api_key}
-    url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
-    resp = requests.get(f"{VT_BASE}/urls/{url_id}", headers=headers, timeout=15)
-    if resp.status_code != 404:
-        resp.raise_for_status()
-        return resp.json()["data"]["attributes"]["last_analysis_stats"]
-
-    submit = requests.post(f"{VT_BASE}/urls", headers=headers, data={"url": url}, timeout=15)
-    submit.raise_for_status()
-    analysis_id = submit.json()["data"]["id"]
-    deadline = time.time() + max_wait
-    while time.time() < deadline:
-        time.sleep(3)
-        poll = requests.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers, timeout=15)
-        poll.raise_for_status()
-        attrs = poll.json()["data"]["attributes"]
-        if attrs["status"] == "completed":
-            return attrs["stats"]
-    raise TimeoutError("VirusTotal did not finish in time - try again in a minute.")
-
-
-def safe_browsing_scan(url: str, api_key: str) -> list[dict]:
-    """Return Google Safe Browsing threat matches (empty list = nothing known)."""
-    body = {
-        "client": {"clientId": "url-safety-checker", "clientVersion": "1.0"},
-        "threatInfo": {
-            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE",
-                            "POTENTIALLY_HARMFUL_APPLICATION"],
-            "platformTypes": ["ANY_PLATFORM"],
-            "threatEntryTypes": ["URL"],
-            "threatEntries": [{"url": url}],
-        },
-    }
-    resp = requests.post(GSB_URL, params={"key": api_key}, json=body, timeout=15)
-    resp.raise_for_status()
-    return resp.json().get("matches", [])
-
-
-def apply_scanners(result: Analysis, vt_key: str, gsb_key: str) -> list[str]:
-    """Run whichever scanners have keys; add findings. Returns a list of notes/errors."""
-    notes: list[str] = []
-    ran_clean = []
-
-    if vt_key:
-        try:
-            stats = virustotal_scan(result.url, vt_key)
-            bad, sus = stats.get("malicious", 0), stats.get("suspicious", 0)
-            total = sum(stats.values())
-            if bad >= 3:
-                result.add("bad", "VirusTotal: flagged as malicious", f"{bad} of {total} engines flagged this URL.", 80)
-            elif bad or sus:
-                result.add("warn", "VirusTotal: some engines are suspicious",
-                           f"{bad} malicious + {sus} suspicious out of {total} engines.", 35)
-            else:
-                result.add("good", "VirusTotal: no detections", f"0 of {total} engines flagged this URL.")
-                ran_clean.append(True)
-        except Exception as exc:  # network, quota, bad key ...
-            notes.append(f"VirusTotal check failed: {exc}")
-
-    if gsb_key:
-        try:
-            matches = safe_browsing_scan(result.url, gsb_key)
-            if matches:
-                kinds = ", ".join(sorted({m["threatType"] for m in matches}))
-                result.add("bad", "Google Safe Browsing: known threat", f"Listed as: {kinds}.", 90)
-            else:
-                result.add("good", "Google Safe Browsing: not listed", "No known threats for this URL.")
-                ran_clean.append(True)
-        except Exception as exc:
-            notes.append(f"Google Safe Browsing check failed: {exc}")
-
-    # "Clean" only if every scanner that ran came back clean
-    ran = int(bool(vt_key)) + int(bool(gsb_key)) - len(notes)
-    result.scanner_clean = ran > 0 and len(ran_clean) == ran
-    return notes
-
-
 # --------------------------------------------------------------------------- #
 # Classification
 # --------------------------------------------------------------------------- #
@@ -494,7 +410,7 @@ def main() -> None:
 
     with st.spinner("Analysing (the link is NOT being opened)..."):
         result = analyze_url(url_input, link_text, source)
-        notes = apply_scanners(result, vt_key, gsb_key) if result.host else []
+        notes = []
         label, reason = classify(result)
 
     st.subheader("Link preview")

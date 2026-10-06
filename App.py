@@ -450,8 +450,8 @@ def render_result(result: Analysis, label: str, reason: str, notes: list[str]) -
 
 
 def main() -> None:
-    st.set_page_config(page_title="URL Safety Checker", page_icon="🛡️", layout="centered")
-    st.title("🛡️ URL Safety Checker")
+    st.set_page_config(page_title="URL Safety Checker", layout="centered")
+    st.title("URL Safety Checker")
     st.write("Paste a link to check it **before** you click. This app never opens the URL.")
 
     with st.expander("How to use", expanded=False):

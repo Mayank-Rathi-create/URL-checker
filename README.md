@@ -1,4 +1,4 @@
-# 🛡️ URL Safety Checker
+# URL Safety Checker
 
 A Streamlit web app that rates a link as **Safe**, **Moderate** or **Danger** *before* you click it — and explains why.
 The app **never opens or connects to the URL** you enter.

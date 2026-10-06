@@ -1,4 +1,3 @@
-
 # 🛡️ URL Safety Checker
 
 A Streamlit web app that rates a link as **Safe**, **Moderate** or **Danger** *before* you click it — and explains why.
@@ -13,7 +12,6 @@ The app **never opens or connects to the URL** you enter.
 | Online scanners | VirusTotal and Google Safe Browsing (optional, free API keys) |
 | Source of the link | You pick where the link came from; unknown/unsolicited sources add risk |
 | Hover preview | Shows the link as non-clickable text; hovering reveals the real destination |
-| Link-text mismatch | Optional field: catches links that *say* `paypal.com` but go elsewhere |
 | Extra red flags | IP-address hosts, `@` tricks, punycode/homograph characters, URL shorteners, risky TLDs, odd ports, phishing keywords |
 | Feedback | Plain-English explanation of red flags and good signs |
 
@@ -40,11 +38,10 @@ Without keys only the offline checks run. For stronger verdicts:
 - **VirusTotal** – free key at https://www.virustotal.com (profile → API key)
 - **Google Safe Browsing** – free key via Google Cloud Console (enable *Safe Browsing API*)
 
-Provide them any of three ways:
+Provide them either way:
 
-1. Paste into the sidebar, **or**
-2. Environment variables: `VT_API_KEY`, `GSB_API_KEY`, **or**
-3. `.streamlit/secrets.toml` (never commit this file):
+1. Environment variables: `VT_API_KEY`, `GSB_API_KEY`, **or**
+2. `.streamlit/secrets.toml` (never commit this file):
 
 ```toml
 VT_API_KEY = "your-virustotal-key"

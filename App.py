@@ -6,7 +6,7 @@ How it works
 ------------
 1. Local checks (offline, instant): scheme/HTTPS, lookalike / typo-squatted domains,
    brand impersonation, IP-address hosts, punycode (homograph) tricks, URL shorteners,
-   suspicious keywords, link-text mismatch and the source of the link.
+   suspicious keywords, and the source of the link.
 2. Optional online scanners (need free API keys): VirusTotal and Google Safe Browsing.
    These scan the URL from THEIR servers - this app never connects to the target site.
 3. All findings add risk points -> final classification + a plain-English explanation.
@@ -78,8 +78,8 @@ SOURCES: dict[str, tuple[int, str]] = {
     "Someone I know and trust (I confirmed they sent it)": (0, ""),
     "Email from a known sender": (5, "Even known senders get hacked - confirm they really sent it."),
     "Social media post / advertisement": (10, "Links in ads and posts are a common phishing route."),
-    "Unsolicited email, SMS or DM": (20, "Unexpected messages are the #1 delivery method for phishing."),
-    "Unknown or suspicious sender": (30, "Never trust links from people or numbers you do not know."),
+    "Unsolicited email, SMS or DM": (15, "Unexpected messages are the #1 delivery method for phishing."),
+    "Unknown or suspicious sender": (25, "Never trust links from people or numbers you do not know."),
 }
 
 # Thresholds on the risk score
@@ -184,7 +184,7 @@ def best_brand_match(host: str, registered: str) -> tuple[str, str, int] | None:
 # Local analysis
 # --------------------------------------------------------------------------- #
 
-def analyze_url(raw_url: str, link_text: str, source: str) -> Analysis:
+def analyze_url(raw_url: str, source: str) -> Analysis:
     """Run every offline check and return the findings. Never touches the network."""
     url, assumed_scheme = normalize_url(raw_url)
     result = Analysis(url=url)
@@ -229,7 +229,7 @@ def analyze_url(raw_url: str, link_text: str, source: str) -> Analysis:
 
     if "@" in parsed.netloc:
         result.add("bad", "Hidden '@' trick",
-                   "Text before '@' is ignored by browsers, so the link can look like one site but go to another.", 40)
+                   "Text before '@' is ignored by browsers, so the link can look like one site but go to another.", 55)
     if "xn--" in host or not host.isascii():
         result.add("bad", "Internationalised (punycode) characters",
                    "Look-alike letters from other alphabets (e.g. Cyrillic 'а') can fake a real brand.", 40)
@@ -274,16 +274,7 @@ def analyze_url(raw_url: str, link_text: str, source: str) -> Analysis:
     if len(url) > 100:
         result.add("info", "Very long URL", "Long URLs can hide the real destination.", 5)
 
-    # --- 4. Link text vs real destination --------------------------------- #
-    if link_text.strip():
-        m = re.search(r"(?:[a-z0-9-]+\.)+[a-z]{2,}", link_text.lower())
-        if m:
-            shown = registered_domain_of(m.group(0))
-            if shown != result.registered_domain:
-                result.add("bad", "Link text does not match the real destination",
-                           f"The link SAYS '{shown}' but actually goes to '{result.registered_domain}'.", 50)
-
-    # --- 5. Source of the link -------------------------------------------- #
+    # --- 4. Source of the link -------------------------------------------- #
     points, note = SOURCES[source]
     if points:
         result.add("warn", f"Source: {source}", note, points)
@@ -291,6 +282,90 @@ def analyze_url(raw_url: str, link_text: str, source: str) -> Analysis:
         result.add("info", f"Source: {source}", "No extra risk from the source.")
 
     return result
+
+
+# --------------------------------------------------------------------------- #
+# Online scanners (optional)
+# --------------------------------------------------------------------------- #
+
+def virustotal_scan(url: str, api_key: str, max_wait: int = 45) -> dict:
+    """Return VirusTotal analysis stats for the URL (looks up first, submits if unknown)."""
+    headers = {"x-apikey": api_key}
+    url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
+    resp = requests.get(f"{VT_BASE}/urls/{url_id}", headers=headers, timeout=15)
+    if resp.status_code != 404:
+        resp.raise_for_status()
+        return resp.json()["data"]["attributes"]["last_analysis_stats"]
+
+    submit = requests.post(f"{VT_BASE}/urls", headers=headers, data={"url": url}, timeout=15)
+    submit.raise_for_status()
+    analysis_id = submit.json()["data"]["id"]
+    deadline = time.time() + max_wait
+    while time.time() < deadline:
+        time.sleep(3)
+        poll = requests.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers, timeout=15)
+        poll.raise_for_status()
+        attrs = poll.json()["data"]["attributes"]
+        if attrs["status"] == "completed":
+            return attrs["stats"]
+    raise TimeoutError("VirusTotal did not finish in time - try again in a minute.")
+
+
+def safe_browsing_scan(url: str, api_key: str) -> list[dict]:
+    """Return Google Safe Browsing threat matches (empty list = nothing known)."""
+    body = {
+        "client": {"clientId": "url-safety-checker", "clientVersion": "1.0"},
+        "threatInfo": {
+            "threatTypes": ["MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE",
+                            "POTENTIALLY_HARMFUL_APPLICATION"],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": url}],
+        },
+    }
+    resp = requests.post(GSB_URL, params={"key": api_key}, json=body, timeout=15)
+    resp.raise_for_status()
+    return resp.json().get("matches", [])
+
+
+def apply_scanners(result: Analysis, vt_key: str, gsb_key: str) -> list[str]:
+    """Run whichever scanners have keys; add findings. Returns a list of notes/errors."""
+    notes: list[str] = []
+    ran_clean = []
+
+    if vt_key:
+        try:
+            stats = virustotal_scan(result.url, vt_key)
+            bad, sus = stats.get("malicious", 0), stats.get("suspicious", 0)
+            total = sum(stats.values())
+            if bad >= 3:
+                result.add("bad", "VirusTotal: flagged as malicious", f"{bad} of {total} engines flagged this URL.", 80)
+            elif bad or sus:
+                result.add("warn", "VirusTotal: some engines are suspicious",
+                           f"{bad} malicious + {sus} suspicious out of {total} engines.", 35)
+            else:
+                result.add("good", "VirusTotal: no detections", f"0 of {total} engines flagged this URL.")
+                ran_clean.append(True)
+        except Exception as exc:  # network, quota, bad key ...
+            notes.append(f"VirusTotal check failed: {exc}")
+
+    if gsb_key:
+        try:
+            matches = safe_browsing_scan(result.url, gsb_key)
+            if matches:
+                kinds = ", ".join(sorted({m["threatType"] for m in matches}))
+                result.add("bad", "Google Safe Browsing: known threat", f"Listed as: {kinds}.", 90)
+            else:
+                result.add("good", "Google Safe Browsing: not listed", "No known threats for this URL.")
+                ran_clean.append(True)
+        except Exception as exc:
+            notes.append(f"Google Safe Browsing check failed: {exc}")
+
+    # "Clean" only if every scanner that ran came back clean
+    ran = int(bool(vt_key)) + int(bool(gsb_key)) - len(notes)
+    result.scanner_clean = ran > 0 and len(ran_clean) == ran
+    return notes
+
 
 # --------------------------------------------------------------------------- #
 # Classification
@@ -375,31 +450,25 @@ def render_result(result: Analysis, label: str, reason: str, notes: list[str]) -
 
 
 def main() -> None:
-    st.set_page_config(page_title="URL Safety Checker", layout="centered")
+    st.set_page_config(page_title="URL Safety Checker", page_icon="🛡️", layout="centered")
     st.title("🛡️ URL Safety Checker")
     st.write("Paste a link to check it **before** you click. This app never opens the URL.")
 
     with st.expander("How to use", expanded=False):
         st.markdown(
             "1. Paste the link (right-click → *Copy link address*, don't click it).\n"
-            "2. Optionally add the text the link displayed, and where you got it.\n"
+            "2. Choose where you got the link from.\n"
             "3. Press **Check URL** and read the explanation.\n\n"
             "**Safe** = no red flags and verified · **Moderate** = be careful / unverified · "
             "**Danger** = do not open."
         )
 
-    with st.sidebar:
-        st.header("Online scanners (optional)")
-        st.caption("Keys stay in your session. Without keys only the offline checks run.")
-        vt_key = st.text_input("VirusTotal API key", value=get_secret("VT_API_KEY"), type="password")
-        gsb_key = st.text_input("Google Safe Browsing key", value=get_secret("GSB_API_KEY"), type="password")
-        st.caption("Online scanners receive the URL you submit.")
+    vt_key = get_secret("VT_API_KEY")
+    gsb_key = get_secret("GSB_API_KEY")
 
     with st.form("check_form"):
         url_input = st.text_input("URL to check", placeholder="https://example.com/login")
-        link_text = st.text_input("Text shown on the link (optional)",
-                                  placeholder="e.g. www.paypal.com - helps catch disguised links")
-        source = st.selectbox("Where did this link come from?", list(SOURCES.keys()), index=4)
+        source = st.selectbox("Where did this link come from?", list(SOURCES.keys()), index=0)
         submitted = st.form_submit_button("Check URL", type="primary")
 
     if not submitted:
@@ -409,12 +478,12 @@ def main() -> None:
         return
 
     with st.spinner("Analysing (the link is NOT being opened)..."):
-        result = analyze_url(url_input, link_text, source)
-        notes = []
+        result = analyze_url(url_input, source)
+        notes = apply_scanners(result, vt_key, gsb_key) if result.host else []
         label, reason = classify(result)
 
     st.subheader("Link preview")
-    render_hover_preview(result.url, link_text or None)
+    render_hover_preview(result.url, result.url)
     st.code(result.url, language=None)
 
     st.subheader("Result")

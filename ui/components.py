@@ -14,35 +14,21 @@ import streamlit as st
 from core.models import Analysis, FindingSeverity, ThreatLevel
 
 
-def render_header(current_theme: str) -> None:
-    """Renders the top branding navigation and controls."""
-    col1, col2 = st.columns([4, 1.2], vertical_alignment="center")
-
-    with col1:
-        st.markdown(
-            """
-            <div style="display:flex; align-items:center; gap:12px;">
-                <div style="font-size:2.2rem; line-height:1;">🛡️</div>
-                <div>
-                    <h1 style="font-size:1.6rem; font-weight:800; margin:0; line-height:1.2;">
-                        URL Safety & Phishing Inspector
-                    </h1>
-                    <div style="font-size:0.83rem; color:var(--text-secondary); margin-top:2px;">
-                        Zero-Click Privacy Engine · Inspect links before clicking
-                    </div>
-                </div>
+def render_header() -> None:
+    """Renders the top branding and header."""
+    st.markdown(
+        """
+        <div class="hero-container">
+            <div style="font-size:2.6rem; line-height:1; margin-bottom:8px;">🛡️</div>
+            <div class="hero-title">URL Safety Checker</div>
+            <div class="hero-subtitle">
+                Inspect links for phishing, impersonation, and hidden threats before you click.<br>
+                <span style="font-size:0.85rem; color:var(--safe-text); font-weight:600;">🔒 Zero-Click Guarantee: We never connect to or load the target URL.</span>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col2:
-        # Theme toggle button
-        is_dark = current_theme == "dark"
-        theme_label = "🌙 Dark" if is_dark else "☀️ Light"
-        if st.button(f"{theme_label}", key="theme_toggle_btn", help="Switch between Dark and Light mode", use_container_width=True):
-            st.session_state["theme"] = "light" if is_dark else "dark"
-            st.rerun()
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_verdict_card(analysis: Analysis) -> None:

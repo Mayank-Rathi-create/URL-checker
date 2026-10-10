@@ -18,7 +18,6 @@ from core import (
 )
 from ui import (
     get_theme_css,
-    render_export_report,
     render_findings_list,
     render_header,
     render_homoglyphs_alert,
@@ -61,9 +60,6 @@ def run_inspection(url_val: str, source_val: str, vt_key: str, gsb_key: str) -> 
 
     st.markdown("### Findings & Breakdown")
     render_findings_list(analysis)
-
-    st.markdown("---")
-    render_export_report(analysis)
 
 
 def main() -> None:
@@ -110,8 +106,6 @@ def main() -> None:
         render_hover_preview(last_res)
         st.markdown("### Findings & Breakdown")
         render_findings_list(last_res)
-        st.markdown("---")
-        render_export_report(last_res)
 
     # Footer
     st.markdown(

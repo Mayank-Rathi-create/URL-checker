@@ -232,51 +232,7 @@ def render_findings_list(analysis: Analysis) -> None:
                 st.info(note)
 
 
-def render_export_report(analysis: Analysis) -> None:
-    """Offers quick report copying and raw JSON export."""
-    col1, col2 = st.columns([1, 1])
 
-    report_lines = [
-        f"# URL Safety Report: {analysis.anatomy.registered_domain or analysis.anatomy.host}",
-        f"- Target URL: `{analysis.url}`",
-        f"- Verdict: **{analysis.threat_level.value}** ({analysis.score}/100 Risk Score)",
-        f"- Transport: {analysis.anatomy.scheme.upper()} ({'Encrypted' if analysis.anatomy.scheme == 'https' else 'Unencrypted'})",
-        f"- Origin Context: {analysis.source_context}",
-        "\n### Key Findings:",
-    ]
-    for f in analysis.findings:
-        pts = f" (+{f.points} risk)" if f.points else ""
-        report_lines.append(f"- [{f.icon}] **{f.title}**{pts}: {f.detail}")
-
-    report_text = "\n".join(report_lines)
-
-    with col1:
-        st.download_button(
-            "📋 Download Markdown Report",
-            data=report_text,
-            file_name=f"url-report-{analysis.anatomy.registered_domain or 'scan'}.md",
-            mime="text/markdown",
-            use_container_width=True,
-        )
-
-    with col2:
-        export_data = {
-            "url": analysis.url,
-            "threat_level": analysis.threat_level.value,
-            "score": analysis.score,
-            "registered_domain": analysis.anatomy.registered_domain,
-            "findings": [
-                {"level": f.level.value, "title": f.title, "points": f.points, "detail": f.detail}
-                for f in analysis.findings
-            ],
-        }
-        st.download_button(
-            "💾 Download JSON Data",
-            data=json.dumps(export_data, indent=2),
-            file_name="url-analysis.json",
-            mime="application/json",
-            use_container_width=True,
-        )
 
 
 def render_threat_guide() -> None:

@@ -3,7 +3,6 @@ UI package for URL Safety Inspector.
 """
 
 from .components import (
-    render_export_report,
     render_findings_list,
     render_header,
     render_homoglyphs_alert,
@@ -24,6 +23,5 @@ __all__ = [
     "render_homoglyphs_alert",
     "render_hover_preview",
     "render_findings_list",
-    "render_export_report",
     "render_threat_guide",
 ]

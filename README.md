@@ -13,7 +13,6 @@ Built with a **Zero-Click Guarantee**: the application **never connects to, fetc
 - **🔤 Homoglyph Deception Detector**: Identifies deceptive international characters (e.g. Cyrillic `а` mimicking Latin `a`) and shows the exact Unicode codepoints and mimic targets.
 - **Zero-Click Hover Preview**: Non-clickable safe preview box to inspect destination details safely.
 - **📋 Plain-English Findings**: Clear categorization into Critical Red Flags, Warnings, Good Signs, and Informational context.
-- **💾 Export Findings**: Download complete analysis reports in Markdown or JSON format.
 
 ### 🧠 Detection Engine (100% Offline & Safe)
 | Heuristic | What It Checks |

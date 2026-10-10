@@ -69,7 +69,6 @@ def run_inspection(url_val: str, source_val: str, vt_key: str, gsb_key: str) -> 
 def main() -> None:
     st.set_page_config(
         page_title="URL Safety Checker",
-        page_icon="🛡️",
         layout="centered",
         initial_sidebar_state="collapsed",
     )

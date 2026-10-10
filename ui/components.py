@@ -1,6 +1,6 @@
 """
-Reusable UI components for the URL Safety Inspector.
-Crafted for clean aesthetics, readability, and modern ergonomics.
+Reusable UI components for URL Safety Checker.
+Crafted for clean presentation, high contrast, and direct HTML rendering (no markdown leaking).
 """
 
 from __future__ import annotations
@@ -15,19 +15,15 @@ from core.models import Analysis, FindingSeverity, ThreatLevel
 
 
 def render_header() -> None:
-    """Renders the top branding and header."""
-    st.markdown(
-        """
-        <div class="hero-container">
-            <div style="font-size:2.6rem; line-height:1; margin-bottom:8px;">🛡️</div>
-            <div class="hero-title">URL Safety Checker</div>
-            <div class="hero-subtitle">
-                Inspect links for phishing, impersonation, and hidden threats before you click.<br>
-                <span style="font-size:0.85rem; color:var(--safe-text); font-weight:600;">🔒 Zero-Click Guarantee: We never connect to or load the target URL.</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    """Renders the top branding and header without any logo."""
+    st.html(
+        """<div class="hero-container">
+<div class="hero-title">URL Safety Checker</div>
+<div class="hero-subtitle">
+Inspect links for phishing, impersonation, and hidden threats before you click.<br>
+<span style="font-size:0.85rem; color:#10B981; font-weight:600;">Zero-Click Guarantee: We never connect to or open the target URL.</span>
+</div>
+</div>"""
     )
 
 
@@ -53,154 +49,102 @@ def render_verdict_card(analysis: Analysis) -> None:
         gauge_color = "#EF4444"
         tag_text = "HIGH RISK / SUSPICIOUS"
 
-    st.markdown(
-        f"""
-        <div class="verdict-card {card_class}">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span style="font-size:0.78rem; font-weight:800; letter-spacing:1px; text-transform:uppercase;">
-                    {tag_text}
-                </span>
-                <span style="font-size:0.9rem; font-weight:700;">
-                    Risk Score: {score}/100
-                </span>
-            </div>
-            <div class="verdict-headline">
-                <span>{badge_icon}</span>
-                <span>{title}</span>
-            </div>
-            <div class="verdict-subtext">
-                {summary}
-            </div>
-            <div class="gauge-wrapper">
-                <div class="gauge-label-row">
-                    <span>Threat Exposure Meter</span>
-                    <span>{score}%</span>
-                </div>
-                <div class="gauge-track">
-                    <div class="gauge-fill" style="width: {score}%; background: {gauge_color};"></div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    safe_title = html.escape(title)
+    safe_summary = html.escape(summary)
+
+    st.html(
+        f"""<div class="verdict-card {card_class}">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+<span style="font-size:0.78rem; font-weight:800; letter-spacing:1px; text-transform:uppercase;">{tag_text}</span>
+<span style="font-size:0.9rem; font-weight:700;">Risk Score: {score}/100</span>
+</div>
+<div class="verdict-headline">
+<span>{badge_icon}</span>
+<span>{safe_title}</span>
+</div>
+<div class="verdict-subtext">{safe_summary}</div>
+<div class="gauge-wrapper">
+<div class="gauge-label-row">
+<span>Threat Exposure Meter</span>
+<span>{score}%</span>
+</div>
+<div class="gauge-track">
+<div class="gauge-fill" style="width: {score}%; background: {gauge_color};"></div>
+</div>
+</div>
+</div>"""
     )
 
 
 def render_metrics_grid(analysis: Analysis) -> None:
     """Displays a responsive 4-column metric grid."""
-    c1, c2, c3, c4 = st.columns(4)
-
-    # 1. Risk Score
     score = analysis.score
     score_desc = "Safe range" if score < 20 else ("Moderate risk" if score < 50 else "High threat")
-    with c1:
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Risk Score</div>
-                <div class="metric-card-val">{score} <span style="font-size:0.85rem; font-weight:500; color:var(--text-muted);">/ 100</span></div>
-                <div class="metric-card-sub">{score_desc}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # 2. Destination Domain
-    dom = analysis.anatomy.registered_domain or analysis.anatomy.host or "Unknown"
-    with c2:
-        status = "Official Brand" if analysis.official_brand else ("Reputable" if analysis.is_reputable_domain else "Unverified")
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Registered Domain</div>
-                <div class="metric-card-val" style="font-size:1.15rem; word-break:break-all;">{dom}</div>
-                <div class="metric-card-sub">{status}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # 3. Transport Security
-    proto = analysis.anatomy.scheme.upper() or "-"
+    dom = html.escape(analysis.anatomy.registered_domain or analysis.anatomy.host or "Unknown")
+    status = "Official Brand" if analysis.official_brand else ("Reputable" if analysis.is_reputable_domain else "Unverified")
+    proto = html.escape(analysis.anatomy.scheme.upper() or "-")
     is_https = analysis.anatomy.scheme == "https"
-    with c3:
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Transport Protocol</div>
-                <div class="metric-card-val" style="font-size:1.15rem;">
-                    {"🔒 " if is_https else "🔓 "}{proto}
-                </div>
-                <div class="metric-card-sub">{"Encrypted (TLS)" if is_https else "Unencrypted plaintext"}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    proto_icon = "🔒" if is_https else "🔓"
+    proto_desc = "Encrypted (TLS)" if is_https else "Unencrypted plaintext"
+    num_bad = len([f for f in analysis.findings if f.level == FindingSeverity.BAD])
+    num_warn = len([f for f in analysis.findings if f.level == FindingSeverity.WARN])
+    flag_summary = f"{num_bad} alerts, {num_warn} warnings" if (num_bad or num_warn) else "0 alerts detected"
 
-    # 4. Intelligence & Origin
-    with c4:
-        num_red_flags = len([f for f in analysis.findings if f.level == FindingSeverity.BAD])
-        num_warns = len([f for f in analysis.findings if f.level == FindingSeverity.WARN])
-        flag_summary = f"{num_red_flags} red flags, {num_warns} warnings" if (num_red_flags or num_warns) else "0 alerts detected"
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-card-title">Signals Detected</div>
-                <div class="metric-card-val" style="font-size:1.15rem;">{len(analysis.findings)} Findings</div>
-                <div class="metric-card-sub">{flag_summary}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    st.html(
+        f"""<div class="metrics-grid">
+<div class="metric-card">
+<div class="metric-card-title">Risk Score</div>
+<div class="metric-card-val">{score} <span style="font-size:0.85rem; font-weight:500; color:#64748B;">/ 100</span></div>
+<div class="metric-card-sub">{score_desc}</div>
+</div>
+<div class="metric-card">
+<div class="metric-card-title">Registered Domain</div>
+<div class="metric-card-val" style="font-size:1.15rem; word-break:break-all;">{dom}</div>
+<div class="metric-card-sub">{status}</div>
+</div>
+<div class="metric-card">
+<div class="metric-card-title">Transport Protocol</div>
+<div class="metric-card-val" style="font-size:1.15rem;">{proto_icon} {proto}</div>
+<div class="metric-card-sub">{proto_desc}</div>
+</div>
+<div class="metric-card">
+<div class="metric-card-title">Signals Detected</div>
+<div class="metric-card-val" style="font-size:1.15rem;">{len(analysis.findings)} Findings</div>
+<div class="metric-card-sub">{flag_summary}</div>
+</div>
+</div>"""
+    )
 
 
 def render_url_anatomy(analysis: Analysis) -> None:
     """Renders the decomposed URL anatomy into color-coded structural pills."""
     anat = analysis.anatomy
-    st.markdown(
-        """
-        <div class="anatomy-box">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.86rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary);">
-                    🔍 URL Structural Anatomy Breakdown
-                </span>
-                <span style="font-size:0.78rem; color:var(--text-muted);">
-                    The real destination is the <b>Registered Domain</b>, not subdomains
-                </span>
-            </div>
-            <div class="anatomy-pill-row">
-        """,
-        unsafe_allow_html=True,
-    )
-
-    pills_html = []
-    # Scheme
+    pills = []
     if anat.scheme:
-        pills_html.append(f'<span class="anatomy-pill"><span class="pill-tag">Scheme</span><span class="pill-val">{anat.scheme}://</span></span>')
-
-    # Subdomain
+        pills.append(f'<span class="anatomy-pill"><span class="pill-tag">Scheme</span><span class="pill-val">{html.escape(anat.scheme)}://</span></span>')
     if anat.subdomain:
-        pills_html.append(f'<span class="anatomy-pill"><span class="pill-tag">Subdomain</span><span class="pill-val">{anat.subdomain}.</span></span>')
-
-    # Registered Domain (Prominently styled)
+        pills.append(f'<span class="anatomy-pill"><span class="pill-tag">Subdomain</span><span class="pill-val">{html.escape(anat.subdomain)}.</span></span>')
     if anat.registered_domain:
-        pills_html.append(f'<span class="anatomy-pill registered"><span class="pill-tag">Real Domain</span><span class="pill-val">{anat.registered_domain}</span></span>')
-
-    # Port
+        pills.append(f'<span class="anatomy-pill registered"><span class="pill-tag">Real Domain</span><span class="pill-val">{html.escape(anat.registered_domain)}</span></span>')
     if anat.port:
-        pills_html.append(f'<span class="anatomy-pill"><span class="pill-tag">Port</span><span class="pill-val">:{anat.port}</span></span>')
-
-    # Path
+        pills.append(f'<span class="anatomy-pill"><span class="pill-tag">Port</span><span class="pill-val">:{anat.port}</span></span>')
     if anat.path and anat.path != "/":
         path_disp = anat.path if len(anat.path) < 35 else f"{anat.path[:32]}..."
-        pills_html.append(f'<span class="anatomy-pill"><span class="pill-tag">Path</span><span class="pill-val">{html.escape(path_disp)}</span></span>')
-
-    # Query
+        pills.append(f'<span class="anatomy-pill"><span class="pill-tag">Path</span><span class="pill-val">{html.escape(path_disp)}</span></span>')
     if anat.query:
         query_disp = f"?{anat.query[:28]}..." if len(anat.query) > 30 else f"?{anat.query}"
-        pills_html.append(f'<span class="anatomy-pill"><span class="pill-tag">Query</span><span class="pill-val">{html.escape(query_disp)}</span></span>')
+        pills.append(f'<span class="anatomy-pill"><span class="pill-tag">Query</span><span class="pill-val">{html.escape(query_disp)}</span></span>')
 
-    st.markdown("".join(pills_html) + "</div></div>", unsafe_allow_html=True)
+    pills_str = "".join(pills)
+    st.html(
+        f"""<div class="anatomy-box">
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+<span style="font-size:0.86rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#94A3B8;">URL Structural Anatomy Breakdown</span>
+<span style="font-size:0.78rem; color:#64748B;">The real destination is the <b>Registered Domain</b></span>
+</div>
+<div class="anatomy-pill-row">{pills_str}</div>
+</div>"""
+    )
 
 
 def render_homoglyphs_alert(analysis: Analysis) -> None:
@@ -209,83 +153,78 @@ def render_homoglyphs_alert(analysis: Analysis) -> None:
     if not (anat.is_punycode or anat.homoglyphs):
         return
 
-    st.markdown(
-        """
-        <div style="background:var(--danger-bg); border:1.5px solid var(--danger-border); border-radius:14px; padding:18px; margin-bottom:20px;">
-            <div style="display:flex; align-items:center; gap:8px; font-weight:800; font-size:1.1rem; color:var(--danger-text); margin-bottom:8px;">
-                <span>⚠️</span> <span>Homograph / Character Deception Detected!</span>
-            </div>
-            <div style="font-size:0.9rem; color:var(--text-secondary); line-height:1.45;">
-                This address uses characters that visually mimic Latin letters to impersonate legitimate brand domains.
-            </div>
-            <div style="margin-top:12px; font-family:'JetBrains Mono', monospace; font-size:0.88rem; background:rgba(0,0,0,0.15); padding:10px 14px; border-radius:8px;">
-        """,
-        unsafe_allow_html=True,
-    )
-
+    items = []
     for h in anat.homoglyphs:
-        st.markdown(
-            f"• Spoofed letter: `<b style='color:#EF4444; font-size:1.1rem;'>{h['char']}</b>` "
-            f"({h['codepoint']} - {h['description']}) disguising Latin `<b>{h['mimics']}</b>`",
-            unsafe_allow_html=True,
+        safe_char = html.escape(h["char"])
+        safe_code = html.escape(h["codepoint"])
+        safe_desc = html.escape(h["description"])
+        safe_mimic = html.escape(h["mimics"])
+        items.append(
+            f"<div>• Spoofed letter: <b style='color:#EF4444; font-size:1.05rem;'>{safe_char}</b> "
+            f"({safe_code} - {safe_desc}) disguising Latin <b>{safe_mimic}</b></div>"
         )
+    items_str = "".join(items)
 
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.html(
+        f"""<div style="background:rgba(239,68,68,0.12); border:1.5px solid #EF4444; border-radius:14px; padding:18px; margin-bottom:20px;">
+<div style="display:flex; align-items:center; gap:8px; font-weight:800; font-size:1.1rem; color:#F87171; margin-bottom:8px;">
+<span>⚠️</span> <span>Homograph / Character Deception Detected!</span>
+</div>
+<div style="font-size:0.9rem; color:#94A3B8; line-height:1.45; margin-bottom:10px;">
+This address uses international characters that visually mimic Latin letters to fake legitimate brand domains.
+</div>
+<div style="font-family:'JetBrains Mono', monospace; font-size:0.86rem; background:rgba(0,0,0,0.25); padding:10px 14px; border-radius:8px; color:#F8FAFC; line-height:1.6;">
+{items_str}
+</div>
+</div>"""
+    )
 
 
 def render_hover_preview(analysis: Analysis) -> None:
     """Renders non-clickable hover preview with safe copy mechanism."""
     safe_url = html.escape(analysis.url)
-    st.markdown(
-        f"""
-        <div class="preview-box">
-            <div style="font-size:0.8rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">
-                Zero-Click Safe Preview (Not Clickable)
-            </div>
-            <div class="preview-link" title="Target: {safe_url}">
-                {safe_url}
-            </div>
-            <div style="font-size:0.78rem; color:var(--text-muted); margin-top:8px;">
-                Hover over the link above to inspect the target destination. This app never connects to or executes remote code.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    st.html(
+        f"""<div class="preview-box">
+<div style="font-size:0.8rem; font-weight:700; text-transform:uppercase; color:#64748B; margin-bottom:6px;">Zero-Click Safe Preview (Not Clickable)</div>
+<div class="preview-link" title="Target: {safe_url}">{safe_url}</div>
+<div style="font-size:0.78rem; color:#64748B; margin-top:8px;">Hover to view target address safely. This tool never opens or connects to the link.</div>
+</div>"""
     )
 
 
 def render_findings_list(analysis: Analysis) -> None:
-    """Renders categorized findings with risk indicators."""
+    """Renders categorized findings cleanly without code block leakage."""
     groups = [
-        ("🚨 Critical Red Flags", (FindingSeverity.BAD,), True),
-        ("⚠️ Warnings & Anomalies", (FindingSeverity.WARN,), True),
-        ("✅ Verified Safeguards", (FindingSeverity.GOOD,), False),
-        ("ℹ️ Context & Information", (FindingSeverity.INFO,), False),
+        ("Critical Red Flags", (FindingSeverity.BAD,), True, "🚨"),
+        ("Warnings & Anomalies", (FindingSeverity.WARN,), True, "⚠️"),
+        ("Verified Safeguards", (FindingSeverity.GOOD,), False, "✅"),
+        ("Context & Information", (FindingSeverity.INFO,), False, "ℹ️"),
     ]
 
-    for title, levels, default_open in groups:
+    for group_name, levels, default_open, icon in groups:
         matching = [f for f in analysis.findings if f.level in levels]
         if not matching:
             continue
 
-        with st.expander(f"{title} ({len(matching)})", expanded=default_open):
-            for finding in matching:
-                points_badge = f'<span class="finding-points">+{finding.points} Risk</span>' if finding.points > 0 else ""
-                st.markdown(
-                    f"""
-                    <div class="finding-row">
-                        <div class="finding-icon">{finding.icon}</div>
-                        <div class="finding-content">
-                            <div class="finding-header">
-                                <span class="finding-title">{finding.title}</span>
-                                {points_badge}
-                            </div>
-                            <div class="finding-detail">{finding.detail}</div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+        with st.expander(f"{icon} {group_name} ({len(matching)})", expanded=default_open):
+            rows = []
+            for f in matching:
+                pts = f'<span class="finding-points">+{f.points} Risk</span>' if f.points > 0 else ""
+                safe_title = html.escape(f.title)
+                safe_detail = html.escape(f.detail)
+                rows.append(
+                    f"""<div class="finding-row">
+<div class="finding-icon">{f.icon}</div>
+<div class="finding-content">
+<div class="finding-header">
+<span class="finding-title">{safe_title}</span>
+{pts}
+</div>
+<div class="finding-detail">{safe_detail}</div>
+</div>
+</div>"""
                 )
+            st.html("\n".join(rows))
 
     if analysis.scanner_notes:
         with st.expander("ℹ️ External Scanner Diagnostics", expanded=False):
@@ -342,13 +281,13 @@ def render_export_report(analysis: Analysis) -> None:
 
 def render_threat_guide() -> None:
     """Educational guide explaining common link attack vectors."""
-    st.markdown("### 📚 Phishing Tactics & URL Deception Cheat Sheet")
+    st.markdown("### Phishing Tactics & URL Deception Cheat Sheet")
     st.write(
         "Attackers use a variety of deceptive techniques to make malicious links appear legitimate. "
         "Here is how to recognize the most prevalent vectors:"
     )
 
-    t1, t2, t3, t4 = st.tabs(["🔤 Typosquatting", "🎭 Subdomain Deception", "🪞 Homograph / Punycode", "🔗 Open Redirects"])
+    t1, t2, t3, t4 = st.tabs(["Typosquatting", "Subdomain Deception", "Homograph / Punycode", "Open Redirects"])
 
     with t1:
         st.markdown(

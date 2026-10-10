@@ -1,4 +1,4 @@
-# URL Safety Checker 🛡️
+# URL Safety Checker
 
 A sleek, simple, and privacy-first web application that rates links as **Safe**, **Moderate**, or **Danger** *before* you click them — and explains why.
 Built with a **Zero-Click Guarantee**: the application **never connects to, fetches, or loads the target URL**.
@@ -11,7 +11,7 @@ Built with a **Zero-Click Guarantee**: the application **never connects to, fetc
 - **📊 Eye-Catching Threat Verdict**: Visual threat exposure meter (0 to 100%) and plain-English risk classification.
 - **🔍 URL Anatomy Breakdown**: Visual pills dissecting Scheme, Subdomain, Real Registered Domain, and Path to quickly spot brand spoofing in subdomains.
 - **🔤 Homoglyph Deception Detector**: Identifies deceptive international characters (e.g. Cyrillic `а` mimicking Latin `a`) and shows the exact Unicode codepoints and mimic targets.
-- **🛡️ Zero-Click Hover Preview**: Non-clickable safe preview box to inspect destination details safely.
+- **Zero-Click Hover Preview**: Non-clickable safe preview box to inspect destination details safely.
 - **📋 Plain-English Findings**: Clear categorization into Critical Red Flags, Warnings, Good Signs, and Informational context.
 - **💾 Export Findings**: Download complete analysis reports in Markdown or JSON format.
 

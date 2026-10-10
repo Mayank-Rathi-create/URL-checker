@@ -2,6 +2,7 @@
 URL Safety Checker
 A clean, privacy-first web app that rates links as Safe, Moderate, or Danger
 WITHOUT ever connecting to or opening the target URL.
+Features dynamic background intelligence based on URL safety verdicts.
 """
 
 from __future__ import annotations
@@ -38,39 +39,12 @@ def get_secret_or_env(key_name: str) -> str:
     return os.environ.get(key_name, "").strip()
 
 
-def run_inspection(url_val: str, source_val: str, vt_key: str, gsb_key: str) -> None:
-    """Performs offline analysis + optional scanner enrichment, and displays results."""
-    clean_val = url_val.strip()
-    if not clean_val:
-        st.warning("Please enter a URL to check.")
-        return
-
-    with st.spinner("Analyzing link heuristics (the link is NOT being opened)..."):
-        analysis = analyze_url(clean_val, source=source_val)
-        if analysis.anatomy.host and (vt_key or gsb_key):
-            apply_scanners(analysis, vt_key, gsb_key)
-        st.session_state["last_analysis"] = analysis
-
-    # Render results
-    render_verdict_card(analysis)
-    render_metrics_grid(analysis)
-    render_homoglyphs_alert(analysis)
-    render_url_anatomy(analysis)
-    render_hover_preview(analysis)
-
-    st.markdown("### Findings & Breakdown")
-    render_findings_list(analysis)
-
-
 def main() -> None:
     st.set_page_config(
         page_title="URL Safety Checker",
         layout="centered",
         initial_sidebar_state="collapsed",
     )
-
-    # Apply sleek dark theme CSS
-    st.markdown(get_theme_css(), unsafe_allow_html=True)
 
     # Read optional scanner keys from secrets/environment
     vt_key = get_secret_or_env("VT_API_KEY")
@@ -83,6 +57,7 @@ def main() -> None:
     with st.form("check_form"):
         url_input = st.text_input(
             "URL to check",
+            value=st.session_state.get("submitted_url", ""),
             placeholder="Paste or type URL (e.g. https://example.com/login)",
             help="Copy and paste the link address. This app will never open the link.",
         )
@@ -93,19 +68,43 @@ def main() -> None:
         )
         submitted = st.form_submit_button("Check URL", type="primary", use_container_width=True)
 
+    current_analysis: Analysis | None = None
+
     if submitted:
-        st.session_state["submitted_url"] = url_input
-        st.session_state["submitted_source"] = source
-        run_inspection(url_input, source, vt_key, gsb_key)
+        clean_url = url_input.strip()
+        if clean_url:
+            with st.spinner("Analyzing link heuristics (the link is NOT being opened)..."):
+                analysis = analyze_url(clean_url, source=source)
+                if analysis.anatomy.host and (vt_key or gsb_key):
+                    apply_scanners(analysis, vt_key, gsb_key)
+                st.session_state["last_analysis"] = analysis
+                st.session_state["submitted_url"] = clean_url
+                current_analysis = analysis
+        else:
+            st.warning("Please enter a URL to check.")
     elif "last_analysis" in st.session_state and st.session_state["last_analysis"]:
-        last_res: Analysis = st.session_state["last_analysis"]
-        render_verdict_card(last_res)
-        render_metrics_grid(last_res)
-        render_homoglyphs_alert(last_res)
-        render_url_anatomy(last_res)
-        render_hover_preview(last_res)
+        current_analysis = st.session_state["last_analysis"]
+
+    # Determine threat level for dynamic background presentation
+    threat_level = current_analysis.threat_level.value if current_analysis else None
+
+    # Apply dynamic theme CSS (Safe: green matrix, Danger: red hacker, Moderate: "it may be safe")
+    st.markdown(get_theme_css(threat_level), unsafe_allow_html=True)
+
+    if current_analysis:
+        # Display "it may be safe" ambient watermark in background for Moderate links
+        if current_analysis.threat_level == ThreatLevel.MODERATE:
+            st.html('<div class="moderate-bg-watermark">it may be safe</div>')
+
+        # Render inspection results
+        render_verdict_card(current_analysis)
+        render_metrics_grid(current_analysis)
+        render_homoglyphs_alert(current_analysis)
+        render_url_anatomy(current_analysis)
+        render_hover_preview(current_analysis)
+
         st.markdown("### Findings & Breakdown")
-        render_findings_list(last_res)
+        render_findings_list(current_analysis)
 
     # Footer
     st.markdown(

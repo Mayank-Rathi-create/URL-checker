@@ -1,105 +1,108 @@
-# URL Safety Checker
+# URL Safety & Phishing Inspector 🛡️
 
-A Streamlit web app that rates a link as **Safe**, **Moderate** or **Danger** *before* you click it — and explains why.
-The app **never opens or connects to the URL** you enter.
+A modern, privacy-first web application that rates links as **Safe**, **Moderate**, or **Danger** *before* you click them — and explains why.
+Built with a **Zero-Click Guarantee**: the application **never connects to, fetches, or executes the target URL**.
 
-## Features
+---
 
-| Feature | How it works |
+## ✨ Features & Capabilities
+
+### 🎨 Simple & Eye-Catching UI / UX
+- **🌓 Dark & Light Theme Switcher**: 1-click toggle between a high-contrast Cyber Dark mode and an ultra-clean Light mode.
+- **⚡ Quick-Test Samples**: Test official domains, typosquatting, subdomain spoofs, shorteners, IP hosts, and punycode with a single click.
+- **🔍 URL Anatomy Breakdown**: Visual deconstruction into color-coded pills (Scheme, Subdomain, Real Registered Domain, Port, Path, Query). Clearly distinguishes deceptive subdomains from the actual destination domain.
+- **🔤 Homograph & Punycode Spotlight**: Directly identifies deceptive international characters (e.g. Cyrillic `а` U+0430 mimicking Latin `a`) and shows their Unicode codepoint and mimic target.
+- **📊 Interactive Threat Meter**: Clean visual threat gauge bar (0 to 100) and categorized findings.
+- **📦 Batch URL Scanner**: Inspect multiple links simultaneously from emails, messages, or reports.
+- **📋 Export & Share**: Download comprehensive analysis reports in Markdown or raw JSON format.
+- **🛡️ Zero-Click Link Preview**: Non-clickable safe hover preview preventing accidental navigation.
+
+### 🧠 Advanced Detection Engine (Zero-Click Heuristics)
+| Security Signal | How It Works |
 |---|---|
-| Domain authenticity | Compares the domain with a list of official brand domains; detects look-alikes (`paypa1.com`), typos (`gooogle.com`) and brand names hidden in subdomains (`paypal.com.evil.xyz`) |
-| HTTPS check | Checks the URL scheme (`https` vs `http`) |
-| Online scanners | VirusTotal and Google Safe Browsing (optional, free API keys) |
-| Source of the link | You pick where the link came from; unknown/unsolicited sources add risk |
-| Hover preview | Shows the link as non-clickable text; hovering reveals the real destination |
-| Extra red flags | IP-address hosts, `@` tricks, punycode/homograph characters, URL shorteners, risky TLDs, odd ports, phishing keywords |
-| Feedback | Plain-English explanation of red flags and good signs |
+| **Brand Authenticity & Protection** | Compares against 100+ major brands across Tech, Banking, E-Commerce, Social, Crypto, Logistics, and Streaming. Detects lookalikes (`paypa1.com`), fuzzy misspellings, hyphen combos (`paypal-login.com`), and brand injection in subdomains (`paypal.com.evil.xyz`). |
+| **Reputable Domain Whitelist** | Recognizes thousands of established global public domains (Wikipedia, BBC, NYTimes, GitHub, StackOverflow, academic institutions) to avoid false alerts. |
+| **Homoglyph & IDNA Inspection** | Decodes `xn--` punycode and checks characters against Unicode spoof maps to prevent visual deception. |
+| **Protocol & Scheme Security** | Flags dangerous schemes (`javascript:`, `data:`, `file:`, `vbscript:`) and plaintext HTTP connections. |
+| **Host Deception & IP Obfuscation** | Detects raw IPv4/IPv6, hex notation (`0x7f000001`), octal representations, and DWORD integers. |
+| **Open Redirect Detection** | Checks query parameters (`?url=`, `?redirect=`, `?next=`) that redirect victims away from legitimate domains. |
+| **Payload & Extension Watch** | Flags risky executable downloads (`.exe`, `.scr`, `.bat`, `.apk`, `.iso`, etc.) disguised in links. |
+| **URL Shorteners & Risky TLDs** | Flags masking services (`bit.ly`, `tinyurl.com`, `t.co`, etc.) and top abused TLDs (`.zip`, `.mov`, `.top`, `.xyz`, etc.). |
+| **Cloud Threat Intelligence** | Optional integration with VirusTotal v3 and Google Safe Browsing APIs with built-in caching. |
 
-## Quick start
+---
 
+## 🚀 Quick Start
+
+### 1. Install Dependencies
 ```bash
-# 1. (optional) create a virtual environment
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# 2. install dependencies
 pip install -r requirements.txt
+```
 
-# 3. run
+### 2. Run the Application
+You can run using either `app.py` or `App.py`:
+```bash
 streamlit run app.py
 ```
+Open [http://localhost:8501](http://localhost:8501) in your browser.
 
-Open http://localhost:8501.
+---
 
-## API keys (optional but recommended)
+## 🔑 External API Keys (Optional)
 
-Without keys only the offline checks run. For stronger verdicts:
+Offline heuristics run immediately without any API keys. For external multi-vendor antivirus scanning:
 
-- **VirusTotal** – free key at https://www.virustotal.com (profile → API key)
-- **Google Safe Browsing** – free key via Google Cloud Console (enable *Safe Browsing API*)
+1. **VirusTotal** – Free API key from [virustotal.com](https://www.virustotal.com) (Profile → API Key).
+2. **Google Safe Browsing** – Free key via [Google Cloud Console](https://console.cloud.google.com/) (Enable *Safe Browsing API*).
 
-Provide them either way:
+Provide them via either:
+- The in-app **Settings** sidebar under *External Intelligence APIs*, or
+- Environment variables: `VT_API_KEY` and `GSB_API_KEY`, or
+- `.streamlit/secrets.toml`:
+  ```toml
+  VT_API_KEY = "your-virustotal-api-key"
+  GSB_API_KEY = "your-google-safe-browsing-key"
+  ```
 
-1. Environment variables: `VT_API_KEY`, `GSB_API_KEY`, **or**
-2. `.streamlit/secrets.toml` (never commit this file):
+---
 
-```toml
-VT_API_KEY = "your-virustotal-key"
-GSB_API_KEY = "your-safe-browsing-key"
-```
-
-> **URLVoid:** its API is a paid service, so Google Safe Browsing is used as the free alternative. You can add URLVoid by writing another function like `virustotal_scan()` in `app.py` and calling it from `apply_scanners()`.
-
-## How the classification works
-
-Every finding adds *risk points*:
-
-| Score | Result |
-|---|---|
-| 50+ | 🚨 **Danger** |
-| 20 – 49 | ⚠️ **Moderate** |
-| 0 – 19 | ✅ **Safe** — *only if verified* (official domain, or a scanner returned clean). Otherwise **Moderate** ("unverified") |
-
-Examples:
-
-| Input | Result |
-|---|---|
-| `https://paypal.com` | Safe – official domain over HTTPS |
-| `https://paypa1.com` | Danger – look-alike spelling of paypal |
-| `http://bit.ly/xyz123` | Moderate – shortened link, no HTTPS |
-
-## Known limitations (please read)
-
-- **No tool can guarantee a link is safe.** A brand-new phishing site may not be in any database yet. Treat results as a second opinion.
-- **The padlock icon can't be inspected** by a server-side app (it is a browser feature). The app checks the `https` scheme instead. HTTPS means *encrypted*, not *trustworthy*.
-- **Shortened links are not expanded**, because that would require contacting the link. Use VirusTotal to analyse the final destination.
-- **Brand list is small.** Add more brands/domains to `OFFICIAL_DOMAINS` in `app.py`.
-- **Hover feature:** browsers can only show the hover tooltip for text rendered by the page, so the app shows the link as non-clickable text with a tooltip.
-- Heuristics can give false positives (e.g. a legit `.xyz` site) and false negatives.
-
-## Privacy
-
-- The URL is **only** sent to VirusTotal / Google if you provide keys for them. VirusTotal submissions can become visible to other VirusTotal users, so don't scan links containing private tokens or personal data.
-- Nothing is stored by this app.
-
-## Project structure
+## 📁 Project Architecture
 
 ```
-url-safety-checker/
-├── app.py            # whole application (analysis + scanners + UI)
-├── requirements.txt
-└── README.md
+URL-checker/
+├── app.py                 # Primary application entrypoint
+├── App.py                 # Entrypoint proxy (ensures case compatibility)
+├── requirements.txt       # Dependencies (streamlit, requests, tldextract, idna)
+├── README.md              # Documentation
+├── core/                  # Security Analysis Engine (100% offline & safe)
+│   ├── __init__.py
+│   ├── models.py          # Data classes (Analysis, Finding, ThreatLevel, URLAnatomy)
+│   ├── detector.py        # Core heuristics & rule engine
+│   ├── brands.py          # Brand directory, reputable domains, threat signatures
+│   ├── anatomy.py         # URL component parser & homoglyph detector
+│   └── scanners.py        # VirusTotal & Google Safe Browsing API connectors
+├── ui/                    # UI Components & Design System
+│   ├── __init__.py
+│   ├── styles.py          # Modern CSS styling for Dark & Light themes
+│   └── components.py      # Verdict card, gauge, anatomy pills, metrics grid, reports
+└── tests/                 # Unit test suite
+    ├── __init__.py
+    └── test_detector.py   # Heuristic verification tests
 ```
 
-## Deploy (Streamlit Community Cloud)
+---
 
-1. Push this folder to GitHub.
-2. Create a new app at https://share.streamlit.io pointing to `app.py`.
-3. Add `VT_API_KEY` / `GSB_API_KEY` under *Settings → Secrets*.
+## 🧪 Running Tests
 
-## Ideas to extend
+Execute the test suite to verify detection accuracy across all attack vectors:
+```bash
+python -c "import tests.test_detector as td; [getattr(td, n)() for n in dir(td) if n.startswith('test_')]; print('All tests passed!')"
+```
 
-- Domain age via WHOIS (new domains are riskier)
-- Safe link expansion using a sandboxed service
-- Upload an `.eml` file and check every link in it
-- Unit tests with `pytest` for `analyze_url()`
+---
+
+## 🔒 Privacy & Security Policy
+
+- **Zero Direct Connections**: This tool never opens, loads, or queries the target link on the user's computer or server.
+- **Vendor Submission**: When VirusTotal or Google Safe Browsing keys are configured, links are queried through vendor security databases. Do not submit links containing private access tokens or sensitive confidential information.
+- **Educational & Defensive**: Designed to provide clear, actionable intelligence to protect users against phishing and malicious links.

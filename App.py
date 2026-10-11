@@ -53,20 +53,32 @@ def main() -> None:
     # Header
     render_header()
 
+    if "url_input" not in st.session_state:
+        st.session_state["url_input"] = ""
+
+    def handle_clear() -> None:
+        st.session_state["url_input"] = ""
+        st.session_state["last_analysis"] = None
+
     # Input Form
-    with st.form("check_form"):
+    with st.form("check_form", enter_to_submit=True, clear_on_submit=False):
         url_input = st.text_input(
             "URL to check",
-            value=st.session_state.get("submitted_url", ""),
             placeholder="Paste or type URL (e.g. https://example.com/login)",
             help="Copy and paste the link address. This app will never open the link.",
+            key="url_input",
         )
         source = st.selectbox(
             "Where did you get this link?",
             options=list(SOURCES.keys()),
             index=0,
+            key="source_input",
         )
-        submitted = st.form_submit_button("Check URL", type="primary", use_container_width=True)
+        col_submit, col_clear = st.columns([4, 1])
+        with col_submit:
+            submitted = st.form_submit_button("Check URL", type="primary", use_container_width=True)
+        with col_clear:
+            st.form_submit_button("Clear", on_click=handle_clear, use_container_width=True)
 
     current_analysis: Analysis | None = None
 
@@ -78,7 +90,6 @@ def main() -> None:
                 if analysis.anatomy.host and (vt_key or gsb_key):
                     apply_scanners(analysis, vt_key, gsb_key)
                 st.session_state["last_analysis"] = analysis
-                st.session_state["submitted_url"] = clean_url
                 current_analysis = analysis
         else:
             st.warning("Please enter a URL to check.")

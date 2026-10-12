@@ -502,6 +502,78 @@ def get_theme_css(threat_level: str | None = None) -> str:
         border-radius: 10px !important;
     }}
 
+    /* AI Link Intelligence Card */
+    .ai-card {{
+        border-radius: 14px;
+        padding: 20px 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(10px);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }}
+
+    .ai-card-header {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 8px;
+    }}
+
+    .ai-model-pill {{
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #94A3B8;
+        padding: 2px 8px;
+        border-radius: 999px;
+    }}
+
+    .ai-confidence-pill {{
+        font-size: 0.82rem;
+        font-weight: 700;
+        background: rgba(0, 0, 0, 0.25);
+        padding: 4px 10px;
+        border-radius: 8px;
+    }}
+
+    .ai-summary-text {{
+        font-size: 0.95rem;
+        color: #F8FAFC;
+        line-height: 1.5;
+        margin: 6px 0 12px 0;
+    }}
+
+    .ai-identity-badge {{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 6px 12px;
+        margin-bottom: 8px;
+        font-size: 0.85rem;
+    }}
+
+    .ai-reasoning-list {{
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 6px;
+    }}
+
+    .ai-reasoning-item {{
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 0.86rem;
+        color: #CBD5E1;
+        line-height: 1.4;
+    }}
+
     /* Footer */
     .app-footer {{
         text-align: center;
@@ -513,3 +585,4 @@ def get_theme_css(threat_level: str | None = None) -> str:
     }}
     </style>
     """
+

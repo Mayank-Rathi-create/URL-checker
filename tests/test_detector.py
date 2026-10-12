@@ -84,3 +84,15 @@ def test_obfuscated_hex_ip():
 def test_unencrypted_http():
     res = analyze_url("http://example.com/login")
     assert any("Unencrypted HTTP" in f.title for f in res.findings)
+
+
+def test_ai_verification_safe_unlisted_domain():
+    from core.ai_checker import apply_ai_verification
+    res = analyze_url("https://coddy.tech/journeys/c/logic_and_flow")
+    apply_ai_verification(res)
+    assert res.threat_level == ThreatLevel.SAFE
+    assert res.is_ai_verified is True
+    assert res.ai_result is not None
+    assert res.ai_result.status == "SAFE"
+    assert "Safe & AI-Verified" in res.verdict_summary[0]
+

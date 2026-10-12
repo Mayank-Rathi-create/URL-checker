@@ -3,6 +3,7 @@ UI package for URL Safety Inspector.
 """
 
 from .components import (
+    render_ai_intelligence_card,
     render_findings_list,
     render_header,
     render_homoglyphs_alert,
@@ -16,6 +17,7 @@ from .styles import get_theme_css
 
 __all__ = [
     "get_theme_css",
+    "render_ai_intelligence_card",
     "render_header",
     "render_verdict_card",
     "render_metrics_grid",
@@ -25,3 +27,4 @@ __all__ = [
     "render_findings_list",
     "render_threat_guide",
 ]
+

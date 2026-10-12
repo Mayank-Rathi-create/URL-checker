@@ -65,6 +65,19 @@ class URLAnatomy:
 
 
 @dataclass
+class AIVerificationResult:
+    """Diagnostic output from generative AI or dynamic domain intelligence."""
+    status: str = "SKIPPED"  # SAFE | MODERATE | DANGER | SKIPPED | ERROR
+    model_name: str = ""
+    summary: str = ""
+    domain_identity: str = ""
+    confidence: int = 0
+    reasoning: list[str] = field(default_factory=list)
+    raw_response: str = ""
+    is_verified_safe: bool = False
+
+
+@dataclass
 class Analysis:
     """Complete security assessment result."""
     url: str
@@ -76,6 +89,9 @@ class Analysis:
     scanners_used: list[str] = field(default_factory=list)
     scanner_notes: list[str] = field(default_factory=list)
     source_context: str = ""
+    ai_result: AIVerificationResult | None = None
+    is_ai_verified: bool = False
+    is_domain_established: bool = False
 
     def add(
         self,
@@ -106,10 +122,17 @@ class Analysis:
             return ThreatLevel.MODERATE
         
         # When score is low (0-19):
-        # Site is verified if it's an official brand domain, a known reputable domain, or clean in scanners
-        is_verified = self.official_brand is not None or self.is_reputable_domain or self.scanner_clean
+        # Site is verified if it's an official brand domain, a known reputable domain,
+        # clean in scanners, verified by AI, or verified by dynamic domain intelligence.
+        is_verified = (
+            self.official_brand is not None
+            or self.is_reputable_domain
+            or self.scanner_clean
+            or self.is_ai_verified
+            or self.is_domain_established
+        )
         if not is_verified:
-            # Low risk heuristics, but not on verified whitelist
+            # Low risk heuristics, but not on verified directory
             return ThreatLevel.MODERATE
         return ThreatLevel.SAFE
 
@@ -149,7 +172,13 @@ class Analysis:
                 "Moderate Risk / Proceed With Caution",
                 "Suspicious characteristics or atypical link attributes were detected."
             )
+        if self.is_ai_verified:
+            return (
+                "Safe & AI-Verified",
+                "AI threat intelligence confirmed this destination is authentic, legitimate, and safe to use."
+            )
         return (
             "Safe & Verified",
             "No red flags detected, and the destination matches an authentic, reputable service."
         )
+

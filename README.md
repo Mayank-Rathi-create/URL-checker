@@ -7,6 +7,7 @@ Built with a **Zero-Click Guarantee**: the application **never connects to, fetc
 
 ## ✨ Features & Capabilities
 
+- **🤖 AI-Powered Link Verification**: Uses Artificial Intelligence (Google Gemini, OpenAI, Groq, or Autonomous Domain Intelligence) to evaluate legitimate platforms (like educational, tech, and SaaS websites) beyond static hardcoded whitelists.
 - **🌑 Sleek Cyber Dark Theme**: Distraction-free, centered interface with high contrast and glowing security indicators.
 - **📊 Eye-Catching Threat Verdict**: Visual threat exposure meter (0 to 100%) and plain-English risk classification.
 - **🔍 URL Anatomy Breakdown**: Visual pills dissecting Scheme, Subdomain, Real Registered Domain, and Path to quickly spot brand spoofing in subdomains.
@@ -14,11 +15,12 @@ Built with a **Zero-Click Guarantee**: the application **never connects to, fetc
 - **Zero-Click Hover Preview**: Non-clickable safe preview box to inspect destination details safely.
 - **📋 Plain-English Findings**: Clear categorization into Critical Red Flags, Warnings, Good Signs, and Informational context.
 
-### 🧠 Detection Engine (100% Offline & Safe)
-| Heuristic | What It Checks |
+### 🧠 Detection Engine (Heuristics + AI Intelligence)
+| Layer | What It Checks |
 |---|---|
+| **AI Verification Engine** | Dynamically verifies links using Google Gemini (1.5/2.5 Flash), OpenAI, Groq, or live Autonomous Domain Intelligence (RDAP tenure + Google DNS-over-HTTPS). Eliminates false cautions for legitimate services like `coddy.tech`. |
 | **Brand Protection** | Compares against 100+ brands (PayPal, Apple, Google, Microsoft, Amazon, banks, crypto, shipping). Detects lookalikes (`paypa1.com`), typos, and brand injection in subdomains (`paypal.com.evil.xyz`). |
-| **Reputable Domains** | Whitelist of thousands of established domains (Wikipedia, BBC, NYTimes, GitHub, StackOverflow, universities) to prevent false alerts. |
+| **Reputable Domains** | Whitelist of established domains (Wikipedia, BBC, NYTimes, GitHub, StackOverflow, universities) to prevent false alerts. |
 | **Punycode & Homographs** | Decodes `xn--` punycode and checks characters against Unicode spoof maps to prevent visual deception. |
 | **Protocol Security** | Flags dangerous schemes (`javascript:`, `data:`, `file:`, `vbscript:`) and unencrypted plaintext HTTP. |
 | **IP Obfuscation** | Detects raw IPv4/IPv6, hex notation (`0x7f000001`), octal representations, and DWORD integers. |
@@ -44,14 +46,19 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 
 ---
 
-## 🔑 External API Keys (Optional)
+## 🔑 AI & Threat Intelligence Configuration (Optional)
 
-Offline heuristics run immediately without any API keys. To add cloud multi-engine threat intelligence:
-
-Provide keys via environment variables or `.streamlit/secrets.toml`:
+Offline heuristics and **Autonomous Domain Intelligence** run immediately without any API keys.
+To connect generative LLMs or multi-engine scanners, enter keys in the app's sidebar or provide them via `.streamlit/secrets.toml` or environment variables:
 ```toml
-VT_API_KEY = "your-virustotal-api-key"
-GSB_API_KEY = "your-google-safe-browsing-key"
+# AI Verification (Get free key at aistudio.google.com)
+GEMINI_API_KEY = "your-gemini-api-key"
+OPENAI_API_KEY = "your-openai-api-key"
+GROQ_API_KEY   = "your-groq-api-key"
+
+# Scanners
+VT_API_KEY     = "your-virustotal-api-key"
+GSB_API_KEY    = "your-google-safe-browsing-key"
 ```
 
 ---
@@ -64,9 +71,10 @@ URL-checker/
 ├── requirements.txt       # Dependencies (streamlit, requests, tldextract, idna)
 ├── README.md              # Documentation
 ├── .gitignore             # Git exclusion rules
-├── core/                  # Security Heuristic Engine
+├── core/                  # Security Heuristic & AI Engine
 │   ├── __init__.py
-│   ├── models.py          # Data models and threat scoring
+│   ├── ai_checker.py      # AI Verification (Gemini, OpenAI, Groq, RDAP/DNS Intelligence)
+│   ├── models.py          # Data models, AI models, and threat scoring
 │   ├── brands.py          # 100+ brand signatures & reputable domains
 │   ├── anatomy.py         # URL decomposition, IP obfuscation & homoglyphs
 │   ├── detector.py        # Offline detection heuristics
@@ -74,10 +82,10 @@ URL-checker/
 ├── ui/                    # UI Components & Styling
 │   ├── __init__.py
 │   ├── styles.py          # Modern Dark Theme CSS design system
-│   └── components.py      # Verdict card, gauge, anatomy pills, metrics
+│   └── components.py      # Verdict card, AI Intelligence card, gauge, anatomy pills, metrics
 └── tests/                 # Unit Tests
     ├── __init__.py
-    └── test_detector.py   # Automated heuristic verification tests
+    └── test_detector.py   # Automated heuristic & AI verification tests
 ```
 
 ---

@@ -15,10 +15,12 @@ from core import (
     SOURCES,
     ThreatLevel,
     analyze_url,
+    apply_ai_verification,
     apply_scanners,
 )
 from ui import (
     get_theme_css,
+    render_ai_intelligence_card,
     render_findings_list,
     render_header,
     render_homoglyphs_alert,
@@ -41,14 +43,80 @@ def get_secret_or_env(key_name: str) -> str:
 
 def main() -> None:
     st.set_page_config(
-        page_title="URL Safety Checker",
+        page_title="URL Safety Checker with AI Intelligence",
         layout="centered",
-        initial_sidebar_state="collapsed",
+        initial_sidebar_state="expanded",
     )
 
-    # Read optional scanner keys from secrets/environment
-    vt_key = get_secret_or_env("VT_API_KEY")
-    gsb_key = get_secret_or_env("GSB_API_KEY")
+    # Sidebar: AI & Threat Intelligence Configuration
+    with st.sidebar:
+        st.markdown("### 🤖 AI Verification Settings")
+        st.write(
+            "Verify URLs using artificial intelligence rather than relying solely on static hardcoded domain lists."
+        )
+
+        enable_ai = st.toggle("Enable AI Verification", value=True)
+
+        provider_map = {
+            "Auto (Gemini / Smart Hybrid)": "auto",
+            "Google Gemini (Free API Key)": "gemini",
+            "OpenAI (GPT-4o mini)": "openai",
+            "Groq (Llama 3.3 70B)": "groq",
+            "Autonomous Domain Intelligence (No Key Needed)": "autonomous",
+        }
+        selected_provider_label = st.selectbox(
+            "AI Engine / Provider",
+            options=list(provider_map.keys()),
+            index=0,
+        )
+        ai_provider_code = provider_map[selected_provider_label]
+
+        # Auto-detect default API key from environment or secrets
+        default_gemini_key = get_secret_or_env("GEMINI_API_KEY")
+        default_openai_key = get_secret_or_env("OPENAI_API_KEY")
+        default_groq_key = get_secret_or_env("GROQ_API_KEY")
+
+        suggested_key = ""
+        if ai_provider_code in ("auto", "gemini"):
+            suggested_key = default_gemini_key or default_openai_key
+        elif ai_provider_code == "openai":
+            suggested_key = default_openai_key
+        elif ai_provider_code == "groq":
+            suggested_key = default_groq_key
+
+        if ai_provider_code != "autonomous":
+            user_ai_key = st.text_input(
+                "AI API Key (Optional)",
+                value=st.session_state.get("user_ai_key", suggested_key),
+                type="password",
+                help="Paste your Google Gemini, OpenAI, or Groq API key. Stored only in your current session.",
+            )
+            st.session_state["user_ai_key"] = user_ai_key
+            st.markdown(
+                """
+                <span style="font-size:0.78rem; color:#94A3B8;">
+                💡 <b>Free AI Key:</b> Get a free Google Gemini key at <a href="https://aistudio.google.com" target="_blank" style="color:#38BDF8;">Google AI Studio</a>.<br>
+                <i>If left blank, the Autonomous Domain Intelligence AI engine verifies domains dynamically via live RDAP & DNS records.</i>
+                </span>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            user_ai_key = ""
+            st.info("Autonomous Domain Intelligence verifies domain tenure, DNS, and reputation dynamically without requiring an API key.")
+
+        st.markdown("---")
+        st.markdown("### 🔍 External Scanner Keys")
+        vt_key = st.text_input(
+            "VirusTotal API Key (Optional)",
+            value=get_secret_or_env("VT_API_KEY"),
+            type="password",
+        )
+        gsb_key = st.text_input(
+            "Google Safe Browsing Key (Optional)",
+            value=get_secret_or_env("GSB_API_KEY"),
+            type="password",
+        )
 
     # Header
     render_header()
@@ -57,6 +125,7 @@ def main() -> None:
         st.session_state["url_input"] = ""
 
     def handle_clear() -> None:
+        """Resets the input text and clears cached analysis."""
         st.session_state["url_input"] = ""
         st.session_state["last_analysis"] = None
 
@@ -80,21 +149,29 @@ def main() -> None:
         with col_clear:
             st.form_submit_button("Clear", on_click=handle_clear, use_container_width=True)
 
+
     current_analysis: Analysis | None = None
 
     if submitted:
         clean_url = url_input.strip()
         if clean_url:
-            with st.spinner("Analyzing link heuristics (the link is NOT being opened)..."):
+            with st.spinner("Analyzing link heuristics & AI intelligence (the link is NOT being opened)..."):
                 analysis = analyze_url(clean_url, source=source)
                 if analysis.anatomy.host and (vt_key or gsb_key):
                     apply_scanners(analysis, vt_key, gsb_key)
+                if enable_ai and analysis.anatomy.host:
+                    apply_ai_verification(
+                        analysis,
+                        provider=ai_provider_code,
+                        api_key=user_ai_key,
+                    )
                 st.session_state["last_analysis"] = analysis
                 current_analysis = analysis
         else:
             st.warning("Please enter a URL to check.")
     elif "last_analysis" in st.session_state and st.session_state["last_analysis"]:
         current_analysis = st.session_state["last_analysis"]
+
 
     # Determine threat level for dynamic background presentation
     threat_level = current_analysis.threat_level.value if current_analysis else None
@@ -109,6 +186,7 @@ def main() -> None:
 
         # Render inspection results
         render_verdict_card(current_analysis)
+        render_ai_intelligence_card(current_analysis)
         render_metrics_grid(current_analysis)
         render_homoglyphs_alert(current_analysis)
         render_url_anatomy(current_analysis)
@@ -116,6 +194,7 @@ def main() -> None:
 
         st.markdown("### Findings & Breakdown")
         render_findings_list(current_analysis)
+
 
     # Footer
     st.markdown(

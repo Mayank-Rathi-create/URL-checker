@@ -81,7 +81,16 @@ def render_metrics_grid(analysis: Analysis) -> None:
     score = analysis.score
     score_desc = "Safe range" if score < 20 else ("Moderate risk" if score < 50 else "High threat")
     dom = html.escape(analysis.anatomy.registered_domain or analysis.anatomy.host or "Unknown")
-    status = "Official Brand" if analysis.official_brand else ("Reputable" if analysis.is_reputable_domain else "Unverified")
+    if analysis.official_brand:
+        status = "Official Brand"
+    elif analysis.is_reputable_domain:
+        status = "Reputable"
+    elif analysis.is_ai_verified:
+        status = "AI Verified"
+    elif analysis.is_domain_established:
+        status = "Established"
+    else:
+        status = "Unverified"
     proto = html.escape(analysis.anatomy.scheme.upper() or "-")
     is_https = analysis.anatomy.scheme == "https"
     proto_icon = "🔒" if is_https else "🔓"
@@ -114,6 +123,79 @@ def render_metrics_grid(analysis: Analysis) -> None:
 </div>
 </div>"""
     )
+
+
+def render_ai_intelligence_card(analysis: Analysis) -> None:
+    """Renders the AI Link Intelligence & Deep Verification breakdown."""
+    ai = analysis.ai_result
+    if not ai or ai.status == "SKIPPED":
+        return
+
+    safe_model = html.escape(ai.model_name)
+    safe_summary = html.escape(ai.summary)
+    safe_identity = html.escape(ai.domain_identity)
+
+    if ai.status == "SAFE":
+        status_color = "#10B981"
+        status_bg = "rgba(16, 185, 129, 0.12)"
+        status_border = "rgba(16, 185, 129, 0.35)"
+        status_icon = "🛡️"
+        status_title = "Verified Safe & Authentic Destination"
+    elif ai.status == "DANGER":
+        status_color = "#EF4444"
+        status_bg = "rgba(239, 68, 68, 0.12)"
+        status_border = "rgba(239, 68, 68, 0.35)"
+        status_icon = "🚨"
+        status_title = "Malicious Activity / Threat Detected"
+    else:
+        status_color = "#F59E0B"
+        status_bg = "rgba(245, 158, 11, 0.12)"
+        status_border = "rgba(245, 158, 11, 0.35)"
+        status_icon = "⚠️"
+        status_title = "Caution / Limited Historical Tenure"
+
+    # Build reasoning bullets
+    bullets = []
+    for r in ai.reasoning:
+        bullets.append(f'<div class="ai-reasoning-item"><span>•</span> <span>{html.escape(r)}</span></div>')
+    bullets_html = "".join(bullets) if bullets else ""
+
+    reasoning_block = ""
+    if bullets_html:
+        reasoning_block = f"""<div style="margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.08);">
+<div style="font-size:0.75rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:#94A3B8; margin-bottom:6px;">Verification Insights</div>
+<div class="ai-reasoning-list">{bullets_html}</div>
+</div>"""
+
+    identity_tag = ""
+    if safe_identity:
+        identity_tag = f"""<div class="ai-identity-badge">
+<span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; opacity:0.8;">Domain Identity</span>
+<span style="font-weight:700; color:#F8FAFC;">{safe_identity}</span>
+</div>"""
+
+    st.html(
+        f"""<div class="ai-card" style="border:1.5px solid {status_border}; background: {status_bg};">
+<div class="ai-card-header">
+<div style="display:flex; align-items:center; gap:8px;">
+<span style="font-size:1.25rem;">🤖</span>
+<span style="font-weight:800; font-size:1.05rem; color:#F8FAFC; letter-spacing:0.3px;">AI Link Intelligence</span>
+<span class="ai-model-pill">{safe_model}</span>
+</div>
+<div class="ai-confidence-pill" style="color:{status_color};">
+<span>{ai.confidence}% Confidence</span>
+</div>
+</div>
+<div style="display:flex; align-items:center; gap:8px; margin: 10px 0 6px 0;">
+<span style="font-size:1.1rem;">{status_icon}</span>
+<span style="font-weight:700; font-size:1.02rem; color:{status_color};">{status_title}</span>
+</div>
+<div class="ai-summary-text">{safe_summary}</div>
+{identity_tag}
+{reasoning_block}
+</div>"""
+    )
+
 
 
 def render_url_anatomy(analysis: Analysis) -> None:

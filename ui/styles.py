@@ -32,6 +32,16 @@ def get_danger_bg_b64() -> str:
             return base64.b64encode(f.read()).decode("utf-8")
     return ""
 
+@functools.lru_cache(maxsize=1)
+def get_main_bg_b64() -> str:
+    path = ASSETS_DIR / "main_bg.jpg"
+    if path.exists():
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+    return ""
+
+
+
 
 def get_theme_css(threat_level: str | None = None) -> str:
     """
@@ -81,11 +91,22 @@ def get_theme_css(threat_level: str | None = None) -> str:
         background-attachment: fixed !important;
         """
     else:
-        bg_css = """
-        background-color: #0B0F19 !important;
-        background-image: radial-gradient(ellipse at 50% -10%, rgba(56, 189, 248, 0.12) 0%, transparent 65%) !important;
-        background-attachment: fixed !important;
-        """
+        main_b64 = get_main_bg_b64()
+        if main_b64:
+            bg_css = f"""
+            background-color: #060D1A !important;
+            background-image: linear-gradient(rgba(6, 13, 26, 0.72), rgba(6, 13, 26, 0.82)), url('data:image/jpeg;base64,{main_b64}') !important;
+            background-size: cover !important;
+            background-position: center center !important;
+            background-attachment: fixed !important;
+            background-repeat: no-repeat !important;
+            """
+        else:
+            bg_css = """
+            background-color: #0B0F19 !important;
+            background-image: radial-gradient(ellipse at 50% -10%, rgba(56, 189, 248, 0.12) 0%, transparent 65%) !important;
+            background-attachment: fixed !important;
+            """
 
     return f"""
     <style>

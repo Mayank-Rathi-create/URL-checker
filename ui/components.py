@@ -139,7 +139,7 @@ def render_ai_intelligence_card(analysis: Analysis) -> None:
         status_color = "#10B981"
         status_bg = "rgba(16, 185, 129, 0.12)"
         status_border = "rgba(16, 185, 129, 0.35)"
-        status_icon = "🛡️"
+        status_icon = "✅"
         status_title = "Verified Safe & Authentic Destination"
     elif ai.status == "DANGER":
         status_color = "#EF4444"

@@ -1,7 +1,28 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+
+# Caches and virtual environments
 .pytest_cache/
-.streamlit/secrets.toml
+.coverage
+htmlcov/
 venv/
+.venv/
+env/
+ENV/
+
+# Configuration and secrets
 .env
+.streamlit/secrets.toml
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/

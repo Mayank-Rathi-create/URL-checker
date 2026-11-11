@@ -26,6 +26,7 @@ from ui import (
     render_homoglyphs_alert,
     render_hover_preview,
     render_metrics_grid,
+    render_threat_guide,
     render_url_anatomy,
     render_verdict_card,
 )
@@ -41,14 +42,19 @@ def get_secret_or_env(key_name: str) -> str:
     return os.environ.get(key_name, "").strip()
 
 
-def main() -> None:
-    st.set_page_config(
-        page_title="URL Safety Checker with AI Intelligence",
-        layout="centered",
-        initial_sidebar_state="expanded",
-    )
+def init_session_state() -> None:
+    """Initializes persistent application session variables."""
+    if "url_input" not in st.session_state:
+        st.session_state["url_input"] = ""
+    if "last_analysis" not in st.session_state:
+        st.session_state["last_analysis"] = None
 
-    # Sidebar: AI & Threat Intelligence Configuration
+
+def render_sidebar_settings() -> tuple[bool, str, str, str, str]:
+    """
+    Renders AI verification and external threat scanner controls in the sidebar.
+    Returns (enable_ai, ai_provider_code, user_ai_key, vt_key, gsb_key).
+    """
     with st.sidebar:
         st.markdown("### 🤖 AI Verification Settings")
         st.write(
@@ -71,7 +77,7 @@ def main() -> None:
         )
         ai_provider_code = provider_map[selected_provider_label]
 
-        # Auto-detect default API key from environment or secrets
+        # Auto-detect default API keys from environment or secrets
         default_gemini_key = get_secret_or_env("GEMINI_API_KEY")
         default_openai_key = get_secret_or_env("OPENAI_API_KEY")
         default_groq_key = get_secret_or_env("GROQ_API_KEY")
@@ -118,16 +124,29 @@ def main() -> None:
             type="password",
         )
 
+    return enable_ai, ai_provider_code, user_ai_key, vt_key, gsb_key
+
+
+def handle_clear() -> None:
+    """Resets the input text and clears cached analysis."""
+    st.session_state["url_input"] = ""
+    st.session_state["last_analysis"] = None
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="URL Safety Checker with AI Intelligence",
+        layout="centered",
+        initial_sidebar_state="expanded",
+    )
+
+    init_session_state()
+
+    # Sidebar: AI & Threat Intelligence Configuration
+    enable_ai, ai_provider_code, user_ai_key, vt_key, gsb_key = render_sidebar_settings()
+
     # Header
     render_header()
-
-    if "url_input" not in st.session_state:
-        st.session_state["url_input"] = ""
-
-    def handle_clear() -> None:
-        """Resets the input text and clears cached analysis."""
-        st.session_state["url_input"] = ""
-        st.session_state["last_analysis"] = None
 
     # Input Form
     with st.form("check_form", enter_to_submit=True, clear_on_submit=False):
@@ -149,7 +168,6 @@ def main() -> None:
         with col_clear:
             st.form_submit_button("Clear", on_click=handle_clear, use_container_width=True)
 
-
     current_analysis: Analysis | None = None
 
     if submitted:
@@ -169,9 +187,8 @@ def main() -> None:
                 current_analysis = analysis
         else:
             st.warning("Please enter a URL to check.")
-    elif "last_analysis" in st.session_state and st.session_state["last_analysis"]:
+    elif st.session_state.get("last_analysis"):
         current_analysis = st.session_state["last_analysis"]
-
 
     # Determine threat level for dynamic background presentation
     threat_level = current_analysis.threat_level.value if current_analysis else None
@@ -195,6 +212,9 @@ def main() -> None:
         st.markdown("### Findings & Breakdown")
         render_findings_list(current_analysis)
 
+    # Educational Threat Guide
+    with st.expander("📚 Phishing Tactics & URL Deception Cheat Sheet", expanded=False):
+        render_threat_guide()
 
     # Footer
     st.markdown(

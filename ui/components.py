@@ -6,16 +6,13 @@ Crafted for clean presentation, high contrast, and direct HTML rendering (no mar
 from __future__ import annotations
 
 import html
-import json
-from typing import Any
-
 import streamlit as st
 
 from core.models import Analysis, FindingSeverity, ThreatLevel
 
 
 def render_header() -> None:
-    """Renders the top branding and header without any logo."""
+    """Renders the top branding and hero header."""
     st.html(
         """<div class="hero-container">
 <div class="hero-title">URL Safety Checker</div>
@@ -81,6 +78,7 @@ def render_metrics_grid(analysis: Analysis) -> None:
     score = analysis.score
     score_desc = "Safe range" if score < 20 else ("Moderate risk" if score < 50 else "High threat")
     dom = html.escape(analysis.anatomy.registered_domain or analysis.anatomy.host or "Unknown")
+
     if analysis.official_brand:
         status = "Official Brand"
     elif analysis.is_reputable_domain:
@@ -91,10 +89,12 @@ def render_metrics_grid(analysis: Analysis) -> None:
         status = "Established"
     else:
         status = "Unverified"
+
     proto = html.escape(analysis.anatomy.scheme.upper() or "-")
     is_https = analysis.anatomy.scheme == "https"
     proto_icon = "🔒" if is_https else "🔓"
     proto_desc = "Encrypted (TLS)" if is_https else "Unencrypted plaintext"
+
     num_bad = len([f for f in analysis.findings if f.level == FindingSeverity.BAD])
     num_warn = len([f for f in analysis.findings if f.level == FindingSeverity.WARN])
     flag_summary = f"{num_bad} alerts, {num_warn} warnings" if (num_bad or num_warn) else "0 alerts detected"
@@ -195,7 +195,6 @@ def render_ai_intelligence_card(analysis: Analysis) -> None:
 {reasoning_block}
 </div>"""
     )
-
 
 
 def render_url_anatomy(analysis: Analysis) -> None:
@@ -312,9 +311,6 @@ def render_findings_list(analysis: Analysis) -> None:
         with st.expander("ℹ️ External Scanner Diagnostics", expanded=False):
             for note in analysis.scanner_notes:
                 st.info(note)
-
-
-
 
 
 def render_threat_guide() -> None:

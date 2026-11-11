@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote
 
 from .anatomy import is_obfuscated_or_raw_ip, normalize_input_url, parse_url_anatomy
 from .brands import (
@@ -20,6 +20,9 @@ from .brands import (
     SOURCES,
     SUSPICIOUS_TLDS,
     URL_SHORTENERS,
+    get_official_brand,
+    is_reputable_domain,
+    is_url_shortener,
 )
 from .models import Analysis, FindingSeverity, URLAnatomy
 
@@ -42,9 +45,7 @@ def find_brand_impersonation(host: str, registered_domain: str, path: str) -> tu
     """
     host_lower = host.lower()
     reg_lower = registered_domain.lower()
-    norm_host = normalize_leetspeak(host_lower)
     tokens = [t for t in re.split(r"[.\-_/]", host_lower) if len(t) >= 3]
-    norm_tokens = [normalize_leetspeak(t) for t in tokens]
 
     candidates: list[tuple[str, str, int]] = []
 
@@ -86,7 +87,6 @@ def find_brand_impersonation(host: str, registered_domain: str, path: str) -> tu
                     ))
 
         # 2. Subdomain Brand Spoofing (e.g., paypal.com.attacker.xyz, appleid.apple.com.auth-service.com)
-        # Users often read subdomains left-to-right and mistake the brand subdomain for the real site.
         for off_dom in domains:
             if off_dom in host_lower and not host_lower.endswith(f".{off_dom}") and host_lower != off_dom:
                 candidates.append((
@@ -134,17 +134,10 @@ def check_open_redirects(query_string: str) -> list[str]:
     return suspicious_redirects
 
 
-def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analysis:
-    """
-    Performs complete offline static security analysis of the provided URL.
-    Never connects to or opens the link.
-    """
-    raw_clean = raw_url.strip()
-    clean_url, assumed_scheme = normalize_input_url(raw_clean)
-    anatomy = parse_url_anatomy(raw_clean)
-    result = Analysis(url=clean_url, anatomy=anatomy, source_context=source)
+# Sub-Check Modular Heuristic Rules
 
-    # 1. Scheme Validation
+def _check_schemes(raw_clean: str, assumed_scheme: bool, anatomy: URLAnatomy, result: Analysis) -> bool:
+    """Validates protocol schemes and ensures valid host presence. Returns False if analysis cannot continue."""
     risky_schemes = ("javascript:", "data:", "vbscript:", "file:", "blob:", "mailto:")
     if any(raw_clean.lower().startswith(s) for s in risky_schemes):
         scheme_found = raw_clean.split(":")[0].lower()
@@ -155,7 +148,7 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             category="transport",
             points=85,
         )
-        return result
+        return False
 
     if not anatomy.host:
         result.add(
@@ -165,7 +158,7 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             category="structure",
             points=70,
         )
-        return result
+        return False
 
     if assumed_scheme:
         result.add(
@@ -200,8 +193,11 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             category="transport",
             points=20,
         )
+    return True
 
-    # 2. Credential and Obfuscation Exploits
+
+def _check_authority_and_credentials(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Inspects authority segment for credential abuse and userinfo deception."""
     if anatomy.has_credentials:
         result.add(
             FindingSeverity.BAD,
@@ -211,7 +207,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=60,
         )
 
-    # 3. IP Host Detection
+
+def _check_ip_destination(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Checks whether the destination is a raw IP or obfuscated numeric address."""
     if anatomy.is_ip:
         result.add(
             FindingSeverity.BAD,
@@ -221,7 +219,6 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=40,
         )
     else:
-        # Check for obfuscated IP formats (e.g. hex/octal/dword)
         is_obf, obf_detail = is_obfuscated_or_raw_ip(anatomy.host)
         if is_obf:
             result.add(
@@ -232,26 +229,31 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
                 points=50,
             )
 
-    # 4. Port Anomalies
-    if anatomy.port:
-        if anatomy.port in (21, 22, 23, 25, 3389, 6667, 1337):
-            result.add(
-                FindingSeverity.BAD,
-                f"High-Risk Non-Web Port :{anatomy.port}",
-                f"Port {anatomy.port} is typically reserved for non-web services (SSH, FTP, SMTP, RDP) or malware command-and-control.",
-                category="transport",
-                points=35,
-            )
-        elif anatomy.port not in (80, 443, 8080, 8443):
-            result.add(
-                FindingSeverity.WARN,
-                f"Non-Standard Port :{anatomy.port}",
-                f"Websites rarely operate on port {anatomy.port}. Legitimate web services primarily use 80 or 443.",
-                category="transport",
-                points=10,
-            )
 
-    # 5. Punycode & Homoglyph Deception
+def _check_port_anomalies(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Checks for atypical or high-risk network ports."""
+    if not anatomy.port:
+        return
+    if anatomy.port in (21, 22, 23, 25, 3389, 6667, 1337):
+        result.add(
+            FindingSeverity.BAD,
+            f"High-Risk Non-Web Port :{anatomy.port}",
+            f"Port {anatomy.port} is typically reserved for non-web services (SSH, FTP, SMTP, RDP) or malware command-and-control.",
+            category="transport",
+            points=35,
+        )
+    elif anatomy.port not in (80, 443, 8080, 8443):
+        result.add(
+            FindingSeverity.WARN,
+            f"Non-Standard Port :{anatomy.port}",
+            f"Websites rarely operate on port {anatomy.port}. Legitimate web services primarily use 80 or 443.",
+            category="transport",
+            points=10,
+        )
+
+
+def _check_homoglyphs(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Detects internationalized punycode and homoglyph character substitutions."""
     if anatomy.is_punycode or anatomy.homoglyphs:
         spoofed_chars = [f"'{h['char']}' ({h['description']}) mimicking Latin '{h['mimics']}'" for h in anatomy.homoglyphs[:3]]
         detail = (
@@ -266,11 +268,12 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=55,
         )
 
-    # 6. Official Brands & Reputable Domains
+
+def _check_brands_and_reputation(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Verifies domain against brand registries, reputable platforms, and impersonation heuristics."""
     reg_domain = anatomy.registered_domain.lower()
 
-    # Check known official brands
-    brand_match = next((b for b, doms in OFFICIAL_DOMAINS.items() if reg_domain in doms), None)
+    brand_match = get_official_brand(reg_domain)
     if brand_match:
         result.official_brand = brand_match
         result.add(
@@ -280,7 +283,7 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             category="identity",
             points=0,
         )
-    elif reg_domain in REPUTABLE_DOMAINS:
+    elif is_reputable_domain(reg_domain):
         result.is_reputable_domain = True
         result.add(
             FindingSeverity.GOOD,
@@ -290,7 +293,6 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=0,
         )
     else:
-        # Check brand impersonation heuristics
         impersonation = find_brand_impersonation(anatomy.host, reg_domain, anatomy.path)
         if impersonation:
             brand, explanation, points = impersonation
@@ -302,8 +304,10 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
                 points=points,
             )
 
-    # 7. URL Shorteners
-    if reg_domain in URL_SHORTENERS or anatomy.host in URL_SHORTENERS:
+
+def _check_shorteners(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Flags links utilizing URL shortening services."""
+    if is_url_shortener(anatomy.registered_domain) or is_url_shortener(anatomy.host):
         result.add(
             FindingSeverity.WARN,
             "URL Shortener Masking Destination",
@@ -312,7 +316,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=25,
         )
 
-    # 8. Suspicious Top-Level Domains (TLD)
+
+def _check_suspicious_tld(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Detects top-level domains with statistically high abuse rates."""
     suffix = anatomy.suffix.split(".")[-1]
     if suffix in SUSPICIOUS_TLDS:
         result.add(
@@ -323,7 +329,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=15,
         )
 
-    # 9. Host Structural Characteristics
+
+def _check_host_structure(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Checks for deep nested subdomains and excessive hyphenation."""
     if anatomy.subdomain:
         sub_parts = anatomy.subdomain.split(".")
         if len(sub_parts) >= 3:
@@ -345,7 +353,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=12,
         )
 
-    # 10. Phishing Keywords
+
+def _check_phishing_keywords(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Scans URL path and host for concentrated credential-harvesting keywords."""
     if not result.official_brand:
         full_target = f"{anatomy.host}{anatomy.path}".lower()
         matched_keywords = sorted({k for k in PHISHING_KEYWORDS if k in full_target})
@@ -358,7 +368,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
                 points=18,
             )
 
-    # 11. Open Redirect Vector
+
+def _check_open_redirect_vectors(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Checks for dangerous query redirect parameters."""
     open_redirects = check_open_redirects(anatomy.query)
     if open_redirects:
         result.add(
@@ -369,7 +381,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=25,
         )
 
-    # 12. Risky Executable File Downloads
+
+def _check_dangerous_payloads(anatomy: URLAnatomy, result: Analysis) -> None:
+    """Flags direct links to executable files and scripts."""
     path_lower = anatomy.path.lower()
     for ext in DANGEROUS_EXTENSIONS:
         if path_lower.endswith(ext) or f"{ext}?" in path_lower:
@@ -382,7 +396,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             )
             break
 
-    # 13. URL Length Check
+
+def _check_url_length(clean_url: str, result: Analysis) -> None:
+    """Notes unusually long URLs that may hide tracking or obfuscated paths."""
     if len(clean_url) > 120:
         result.add(
             FindingSeverity.INFO,
@@ -392,7 +408,9 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             points=5,
         )
 
-    # 14. Origin / Acquisition Context
+
+def _check_source_context(source: str, result: Analysis) -> None:
+    """Applies contextual risk points based on link acquisition origin."""
     source_risk, source_note = SOURCES.get(source, (0, ""))
     if source_risk > 0:
         result.add(
@@ -410,5 +428,42 @@ def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analys
             category="context",
             points=0,
         )
+
+
+def analyze_url(raw_url: str, source: str = "A website I am browsing") -> Analysis:
+    """
+    Performs complete offline static security analysis of the provided URL.
+    Never connects to or opens the link.
+    """
+    raw_clean = raw_url.strip()
+    clean_url, assumed_scheme = normalize_input_url(raw_clean)
+    anatomy = parse_url_anatomy(raw_clean)
+    result = Analysis(url=clean_url, anatomy=anatomy, source_context=source)
+
+    # 1. Scheme & host integrity check (stops if dangerous scheme or no host)
+    can_proceed = _check_schemes(raw_clean, assumed_scheme, anatomy, result)
+    if not can_proceed:
+        return result
+
+    # 2. Structural & transport heuristics
+    _check_authority_and_credentials(anatomy, result)
+    _check_ip_destination(anatomy, result)
+    _check_port_anomalies(anatomy, result)
+    _check_homoglyphs(anatomy, result)
+
+    # 3. Identity, brand & reputation heuristics
+    _check_brands_and_reputation(anatomy, result)
+    _check_shorteners(anatomy, result)
+    _check_suspicious_tld(anatomy, result)
+
+    # 4. Content & pattern heuristics
+    _check_host_structure(anatomy, result)
+    _check_phishing_keywords(anatomy, result)
+    _check_open_redirect_vectors(anatomy, result)
+    _check_dangerous_payloads(anatomy, result)
+    _check_url_length(clean_url, result)
+
+    # 5. Delivery context
+    _check_source_context(source, result)
 
     return result

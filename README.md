@@ -12,10 +12,12 @@ Built with a **Zero-Click Guarantee**: the application **never connects to, fetc
 - **📊 Eye-Catching Threat Verdict**: Visual threat exposure meter (0 to 100%) and plain-English risk classification.
 - **🔍 URL Anatomy Breakdown**: Visual pills dissecting Scheme, Subdomain, Real Registered Domain, and Path to quickly spot brand spoofing in subdomains.
 - **🔤 Homoglyph Deception Detector**: Identifies deceptive international characters (e.g. Cyrillic `а` mimicking Latin `a`) and shows the exact Unicode codepoints and mimic targets.
-- **Zero-Click Hover Preview**: Non-clickable safe preview box to inspect destination details safely.
+- **🛡️ Zero-Click Safe Preview**: Non-clickable safe preview box to inspect destination details safely.
 - **📋 Plain-English Findings**: Clear categorization into Critical Red Flags, Warnings, Good Signs, and Informational context.
+- **📚 Phishing Tactics Cheat Sheet**: Built-in interactive educational guide detailing typosquatting, subdomain spoofing, homographs, and open redirects.
 
 ### 🧠 Detection Engine (Heuristics + AI Intelligence)
+
 | Layer | What It Checks |
 |---|---|
 | **AI Verification Engine** | Dynamically verifies links using Google Gemini (1.5/2.5 Flash), OpenAI, Groq, or live Autonomous Domain Intelligence (RDAP tenure + Google DNS-over-HTTPS). Eliminates false cautions for legitimate services like `coddy.tech`. |
@@ -50,13 +52,14 @@ Open [http://localhost:8501](http://localhost:8501) in your browser.
 
 Offline heuristics and **Autonomous Domain Intelligence** run immediately without any API keys.
 To connect generative LLMs or multi-engine scanners, enter keys in the app's sidebar or provide them via `.streamlit/secrets.toml` or environment variables:
+
 ```toml
 # AI Verification (Get free key at aistudio.google.com)
 GEMINI_API_KEY = "your-gemini-api-key"
 OPENAI_API_KEY = "your-openai-api-key"
 GROQ_API_KEY   = "your-groq-api-key"
 
-# Scanners
+# External Scanners
 VT_API_KEY     = "your-virustotal-api-key"
 GSB_API_KEY    = "your-google-safe-browsing-key"
 ```
@@ -67,32 +70,36 @@ GSB_API_KEY    = "your-google-safe-browsing-key"
 
 ```
 URL-checker/
-├── App.py                 # Clean single-page application entrypoint
+├── App.py                 # Clean application entrypoint & Streamlit interface
 ├── requirements.txt       # Dependencies (streamlit, requests, tldextract, idna)
-├── README.md              # Documentation
+├── README.md              # Documentation & guides
 ├── .gitignore             # Git exclusion rules
 ├── core/                  # Security Heuristic & AI Engine
-│   ├── __init__.py
+│   ├── __init__.py        # Clean package interface & exports
 │   ├── ai_checker.py      # AI Verification (Gemini, OpenAI, Groq, RDAP/DNS Intelligence)
-│   ├── models.py          # Data models, AI models, and threat scoring
-│   ├── brands.py          # 100+ brand signatures & reputable domains
 │   ├── anatomy.py         # URL decomposition, IP obfuscation & homoglyphs
-│   ├── detector.py        # Offline detection heuristics
-│   └── scanners.py        # VirusTotal & Google Safe Browsing connectors
-├── ui/                    # UI Components & Styling
-│   ├── __init__.py
-│   ├── styles.py          # Modern Dark Theme CSS design system
-│   └── components.py      # Verdict card, AI Intelligence card, gauge, anatomy pills, metrics
-└── tests/                 # Unit Tests
+│   ├── brands.py          # 100+ brand signatures, reputable domains & lookup helpers
+│   ├── cache.py           # Environment-aware TTL caching (Streamlit runtime + standalone)
+│   ├── detector.py        # Modular offline heuristic inspection engine
+│   ├── models.py          # Data models, risk scoring & threat level classification
+│   └── scanners.py        # VirusTotal v3 & Google Safe Browsing connectors
+├── ui/                    # UI Components & Presentation
+│   ├── __init__.py        # UI exports
+│   ├── components.py      # Verdict card, AI card, gauge, anatomy pills, metrics & cheat sheet
+│   └── styles.py          # Modern Cyber Dark Theme CSS design system
+└── tests/                 # Comprehensive Unit Test Suite
     ├── __init__.py
-    └── test_detector.py   # Automated heuristic & AI verification tests
+    ├── test_anatomy.py    # URL decomposition, IP obfuscation & homoglyph tests
+    ├── test_detector.py   # Automated heuristic & AI verification tests
+    └── test_models.py     # Data model, risk scoring & threat level tests
 ```
 
 ---
 
 ## 🧪 Running Tests
 
-Verify all detection heuristics with the automated test suite:
+Execute the full automated test suite using standard Python `unittest`:
+
 ```bash
-python -c "import tests.test_detector as td; [getattr(td, n)() for n in dir(td) if n.startswith('test_')]; print('All tests passed!')"
+python -m unittest discover tests
 ```

@@ -32,6 +32,7 @@ def get_danger_bg_b64() -> str:
             return base64.b64encode(f.read()).decode("utf-8")
     return ""
 
+
 @functools.lru_cache(maxsize=1)
 def get_main_bg_b64() -> str:
     path = ASSETS_DIR / "main_bg.jpg"
@@ -39,8 +40,6 @@ def get_main_bg_b64() -> str:
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
     return ""
-
-
 
 
 def get_theme_css(threat_level: str | None = None) -> str:
@@ -136,9 +135,20 @@ def get_theme_css(threat_level: str | None = None) -> str:
         --danger-text: #F87171;
     }}
 
-    /* Hide sidebar and collapsed sidebar controls */
-    [data-testid="stSidebar"], [data-testid="collapsedControl"] {{
-        display: none !important;
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {{
+        background-color: rgba(11, 15, 25, 0.96) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+        backdrop-filter: blur(14px) !important;
+    }}
+
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {{
+        color: #94A3B8 !important;
+    }}
+
+    section[data-testid="stSidebar"] h3 {{
+        color: #F8FAFC !important;
+        font-weight: 700 !important;
     }}
 
     /* Base typography and background */
@@ -183,7 +193,7 @@ def get_theme_css(threat_level: str | None = None) -> str:
         background-color: transparent !important;
     }}
 
-    /* Hero section (no logo) */
+    /* Hero section */
     .hero-container {{
         text-align: center;
         padding: 6px 0 24px 0;
@@ -606,4 +616,3 @@ def get_theme_css(threat_level: str | None = None) -> str:
     }}
     </style>
     """
-

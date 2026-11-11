@@ -7,7 +7,7 @@ Supports:
 1. Google Gemini (Gemini 2.5 Flash / 1.5 Flash - Free tier available)
 2. OpenAI (GPT-4o-mini / GPT-4o)
 3. Groq (Llama-3.3-70b - High speed & generous quota)
-4. Autonomous Domain Intelligence (Zero-config RDAP & DNS verification fallback)
+4. Autonomous Domain Intelligence (Zero-config RDAP & Google DoH fallback)
 """
 
 from __future__ import annotations
@@ -16,10 +16,13 @@ import datetime
 import json
 import re
 from typing import Any
-import requests
-import streamlit as st
 
+import requests
+
+from .cache import ttl_cache
 from .models import AIVerificationResult, Analysis, FindingSeverity
+
+DEFAULT_USER_AGENT = "URLSafetyChecker/2.0 (+https://github.com/)"
 
 
 def _extract_json_from_text(text: str) -> dict[str, Any]:
@@ -36,29 +39,21 @@ def _extract_json_from_text(text: str) -> dict[str, Any]:
         if start != -1 and end != -1 and end > start:
             text = text[start : end + 1]
 
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Failed to decode model JSON: {exc}. Raw snippet: {text[:100]}") from exc
 
 
-@st.cache_data(ttl=600, show_spinner=False)
-def query_gemini_verification(
+def _build_security_prompt(
     url: str,
     registered_domain: str,
     path: str,
     query: str,
     findings_json: str,
-    api_key: str,
-    model: str = "gemini-1.5-flash",
-) -> dict[str, Any]:
-    """
-    Submits URL context to Google Gemini API for deep security verification.
-    Cached for 10 minutes.
-    """
-    if not api_key.strip():
-        raise ValueError("Missing Gemini API Key")
-
-    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key.strip()}"
-    prompt = f"""
-You are an expert cybersecurity link and threat analyst.
+) -> str:
+    """Builds a standardized cybersecurity threat analysis prompt for LLMs."""
+    return f"""You are an expert cybersecurity link and threat analyst.
 Evaluate this URL thoroughly. Do not rely strictly on a fixed whitelist of top-10 tech giants.
 Many legitimate platforms (e.g. coddy.tech for interactive coding, educational platforms, regional banks, SaaS products)
 are completely safe and benign.
@@ -86,8 +81,30 @@ Respond strictly in valid JSON with this exact schema:
     "Specific factor 2",
     "Specific factor 3"
   ]
-}}
-"""
+}}"""
+
+
+@ttl_cache(ttl=600, show_spinner=False)
+def query_gemini_verification(
+    url: str,
+    registered_domain: str,
+    path: str,
+    query: str,
+    findings_json: str,
+    api_key: str,
+    model: str = "gemini-1.5-flash",
+) -> dict[str, Any]:
+    """
+    Submits URL context to Google Gemini API for deep security verification.
+    Cached for 10 minutes.
+    """
+    cleaned_key = api_key.strip()
+    if not cleaned_key:
+        raise ValueError("Missing Gemini API Key")
+
+    endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={cleaned_key}"
+    prompt = _build_security_prompt(url, registered_domain, path, query, findings_json)
+
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -98,7 +115,7 @@ Respond strictly in valid JSON with this exact schema:
 
     resp = requests.post(
         endpoint,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "User-Agent": DEFAULT_USER_AGENT},
         json=body,
         timeout=12,
     )
@@ -116,7 +133,7 @@ Respond strictly in valid JSON with this exact schema:
     return _extract_json_from_text(raw_text)
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@ttl_cache(ttl=600, show_spinner=False)
 def query_openai_compatible_verification(
     url: str,
     registered_domain: str,
@@ -131,40 +148,17 @@ def query_openai_compatible_verification(
     Submits URL context to OpenAI or Groq (OpenAI-compatible) endpoint.
     Cached for 10 minutes.
     """
-    if not api_key.strip():
+    cleaned_key = api_key.strip()
+    if not cleaned_key:
         raise ValueError("Missing API Key")
 
     headers = {
-        "Authorization": f"Bearer {api_key.strip()}",
+        "Authorization": f"Bearer {cleaned_key}",
         "Content-Type": "application/json",
+        "User-Agent": DEFAULT_USER_AGENT,
     }
-    prompt = f"""
-You are an expert cybersecurity link and threat analyst.
-Evaluate this URL thoroughly. Do not rely strictly on a fixed whitelist of top-10 tech giants.
-Many legitimate platforms (e.g. coddy.tech for interactive coding, educational platforms, regional banks, SaaS products)
-are completely safe and benign.
+    prompt = _build_security_prompt(url, registered_domain, path, query, findings_json)
 
-Target URL: {url}
-Registered Domain: {registered_domain}
-Path: {path}
-Query: {query}
-Heuristic Findings Observed:
-{findings_json}
-
-Identify if this is a legitimate service or malicious.
-Respond strictly in valid JSON with this exact schema:
-{{
-  "verdict": "SAFE" | "MODERATE" | "DANGER",
-  "domain_identity": "concise description of what the site/service is",
-  "confidence": <integer 0-100>,
-  "summary": "1-2 sentence plain-English security verdict",
-  "reasoning": [
-    "Specific factor 1",
-    "Specific factor 2",
-    "Specific factor 3"
-  ]
-}}
-"""
     body = {
         "model": model,
         "messages": [
@@ -186,7 +180,7 @@ Respond strictly in valid JSON with this exact schema:
     return _extract_json_from_text(content)
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@ttl_cache(ttl=600, show_spinner=False)
 def query_domain_intelligence(domain: str) -> dict[str, Any]:
     """
     Zero-config dynamic domain verification using RDAP (Registration Data Access Protocol)
@@ -199,15 +193,17 @@ def query_domain_intelligence(domain: str) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "success",
         "domain": domain,
-        "age_years": 0,
+        "age_years": 0.0,
         "reg_date": None,
         "registrar": "Unknown",
         "dns_active": False,
     }
 
+    req_headers = {"User-Agent": DEFAULT_USER_AGENT, "Accept": "application/json"}
+
     # 1. Check RDAP for domain registration info
     try:
-        rdap_resp = requests.get(f"https://rdap.org/domain/{domain}", timeout=4)
+        rdap_resp = requests.get(f"https://rdap.org/domain/{domain}", headers=req_headers, timeout=5)
         if rdap_resp.status_code == 200:
             data = rdap_resp.json()
             events = {e.get("eventAction"): e.get("eventDate") for e in data.get("events", [])}
@@ -215,7 +211,6 @@ def query_domain_intelligence(domain: str) -> dict[str, Any]:
             if reg_date_str:
                 result["reg_date"] = reg_date_str[:10]
                 try:
-                    # Parse year to compute domain age
                     reg_dt = datetime.datetime.fromisoformat(reg_date_str.replace("Z", "+00:00"))
                     now = datetime.datetime.now(datetime.timezone.utc)
                     age_days = (now - reg_dt).days
@@ -228,7 +223,7 @@ def query_domain_intelligence(domain: str) -> dict[str, Any]:
                 if "registrar" in roles or "sponsor" in roles:
                     vcard = entity.get("vcardArray", [None, []])[1]
                     for entry in vcard:
-                        if entry[0] == "fn":
+                        if entry and entry[0] == "fn":
                             result["registrar"] = entry[3]
                             break
     except Exception as exc:
@@ -236,7 +231,7 @@ def query_domain_intelligence(domain: str) -> dict[str, Any]:
 
     # 2. Check DNS over HTTPS (Google DoH)
     try:
-        doh_resp = requests.get(f"https://dns.google/resolve?name={domain}", timeout=4)
+        doh_resp = requests.get(f"https://dns.google/resolve?name={domain}", headers=req_headers, timeout=5)
         if doh_resp.status_code == 200:
             doh_data = doh_resp.json()
             if doh_data.get("Status") == 0 and len(doh_data.get("Answer", [])) > 0:
@@ -245,6 +240,65 @@ def query_domain_intelligence(domain: str) -> dict[str, Any]:
         result["dns_error"] = str(exc)
 
     return result
+
+
+def _verify_with_autonomous_intelligence(clean_domain: str, analysis: Analysis) -> AIVerificationResult:
+    """Executes dynamic Autonomous Domain Intelligence fallback verification."""
+    intel = query_domain_intelligence(clean_domain)
+    age_years = intel.get("age_years", 0.0)
+    reg_date = intel.get("reg_date", "Recorded")
+    registrar = intel.get("registrar", "Accredited Registrar")
+    dns_active = intel.get("dns_active", False)
+
+    # Domain is established if registered >= 1 year ago or active DNS with zero risk heuristics
+    is_established = bool(age_years >= 1.0 or (dns_active and analysis.score == 0))
+
+    reasoning = []
+    if reg_date and reg_date != "Recorded":
+        reasoning.append(f"Domain active for over {age_years} years (Registered: {reg_date})")
+    if registrar and registrar != "Unknown":
+        reasoning.append(f"Accredited Registrar: {registrar}")
+    if dns_active:
+        reasoning.append("Active authoritative DNS resolution confirmed (Google DoH)")
+
+    if analysis.anatomy.scheme == "https":
+        reasoning.append("Valid TLS/HTTPS transport security")
+
+    if analysis.score == 0:
+        reasoning.append("Zero homoglyphs, credential-harvesting keywords, or deceptive tokens")
+
+    if is_established and analysis.score < 20:
+        status = "SAFE"
+        confidence = 94 if age_years >= 3 else 88
+        summary = (
+            f"Dynamic domain intelligence verified that '{clean_domain}' is an established, "
+            f"legitimate service (active since {reg_date} via {registrar}) with clean security heuristics."
+        )
+        identity = f"Established Platform / Service ({clean_domain})"
+        is_safe = True
+    elif analysis.score >= 50:
+        status = "DANGER"
+        confidence = 85
+        summary = "Suspicious indicators and heuristic flags detected on this domain."
+        identity = clean_domain
+        is_safe = False
+    else:
+        status = "MODERATE"
+        confidence = 70
+        summary = "Domain lacks substantial historical tenure or verification records."
+        identity = clean_domain
+        is_safe = False
+
+    analysis.is_domain_established = is_established
+    return AIVerificationResult(
+        status=status,
+        model_name="Autonomous Domain Intelligence AI",
+        summary=summary,
+        domain_identity=identity,
+        confidence=confidence,
+        reasoning=reasoning,
+        is_verified_safe=is_safe,
+    )
 
 
 def apply_ai_verification(
@@ -269,9 +323,10 @@ def apply_ai_verification(
     findings_json = json.dumps(findings_summary, indent=2)
 
     ai_result: AIVerificationResult | None = None
+    has_llm_key = bool(api_key and api_key.strip())
 
-    # Priority 1: Google Gemini (if key provided or provider selected)
-    if (provider in ("auto", "gemini") and api_key) or provider == "gemini":
+    # Option 1: Google Gemini (if selected or auto with key)
+    if (provider == "gemini" and has_llm_key) or (provider == "auto" and has_llm_key):
         try:
             m = model or "gemini-1.5-flash"
             data = query_gemini_verification(
@@ -296,8 +351,8 @@ def apply_ai_verification(
         except Exception as exc:
             analysis.scanner_notes.append(f"Gemini AI verification error: {exc}")
 
-    # Priority 2: OpenAI / Groq (if provider specified or key provided)
-    elif provider in ("openai", "groq") and api_key:
+    # Option 2: OpenAI / Groq (if selected and key provided)
+    elif provider in ("openai", "groq") and has_llm_key:
         try:
             if provider == "groq":
                 endpoint = "https://api.groq.com/openai/v1/chat/completions"
@@ -331,64 +386,10 @@ def apply_ai_verification(
         except Exception as exc:
             analysis.scanner_notes.append(f"AI verification error ({provider}): {exc}")
 
-    # Priority 3: Autonomous Domain Intelligence (Zero-config dynamic verification fallback)
+    # Fallback / Autonomous Domain Intelligence (Zero-config dynamic verification)
     if not ai_result:
         try:
-            intel = query_domain_intelligence(clean_domain)
-            age_years = intel.get("age_years", 0)
-            reg_date = intel.get("reg_date", "Recorded")
-            registrar = intel.get("registrar", "Accredited Registrar")
-            dns_active = intel.get("dns_active", False)
-
-            # Domain is established if registered >= 1 year ago or active DNS with zero risk heuristics
-            is_established = (age_years >= 1.0 or (dns_active and analysis.score == 0))
-
-            reasoning = []
-            if reg_date and reg_date != "Recorded":
-                reasoning.append(f"Domain active for over {age_years} years (Registered: {reg_date})")
-            if registrar and registrar != "Unknown":
-                reasoning.append(f"Accredited Registrar: {registrar}")
-            if dns_active:
-                reasoning.append("Active authoritative DNS resolution confirmed (Google DoH)")
-
-            if analysis.anatomy.scheme == "https":
-                reasoning.append("Valid TLS/HTTPS transport security")
-
-            if analysis.score == 0:
-                reasoning.append("Zero homoglyphs, credential-harvesting keywords, or deceptive tokens")
-
-            if is_established and analysis.score < 20:
-                status = "SAFE"
-                confidence = 94 if age_years >= 3 else 88
-                summary = (
-                    f"Dynamic domain intelligence verified that '{clean_domain}' is an established, "
-                    f"legitimate service (active since {reg_date} via {registrar}) with clean security heuristics."
-                )
-                identity = f"Established Platform / Service ({clean_domain})"
-                is_safe = True
-            elif analysis.score >= 50:
-                status = "DANGER"
-                confidence = 85
-                summary = "Suspicious indicators and heuristic flags detected on this domain."
-                identity = clean_domain
-                is_safe = False
-            else:
-                status = "MODERATE"
-                confidence = 70
-                summary = "Domain lacks substantial historical tenure or verification records."
-                identity = clean_domain
-                is_safe = False
-
-            ai_result = AIVerificationResult(
-                status=status,
-                model_name="Autonomous Domain Intelligence AI",
-                summary=summary,
-                domain_identity=identity,
-                confidence=confidence,
-                reasoning=reasoning,
-                is_verified_safe=is_safe,
-            )
-            analysis.is_domain_established = is_established
+            ai_result = _verify_with_autonomous_intelligence(clean_domain, analysis)
         except Exception as exc:
             analysis.scanner_notes.append(f"Autonomous domain intelligence error: {exc}")
 

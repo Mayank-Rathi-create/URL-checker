@@ -1,12 +1,12 @@
 """
 URL structure parsing, component decomposition, and homoglyph inspection.
+Extracts normalized schemes, subdomains, registered domains, paths, query
+strings, credentials, and inspects for IP obfuscation or IDN punycode spoofing.
 """
 
 from __future__ import annotations
 
-import html
 import ipaddress
-import re
 import unicodedata
 from urllib.parse import urlparse
 
@@ -171,7 +171,7 @@ def parse_url_anatomy(raw_url: str) -> URLAnatomy:
     has_creds = bool(parsed.username or parsed.password or ("@" in parsed.netloc))
 
     # IP detection
-    is_ip, ip_details = is_obfuscated_or_raw_ip(host)
+    is_ip, _ip_details = is_obfuscated_or_raw_ip(host)
 
     # TLD extraction
     if is_ip:

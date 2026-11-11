@@ -10,38 +10,41 @@ import time
 from typing import Any
 
 import requests
-import streamlit as st
 
+from .cache import ttl_cache
 from .models import Analysis, FindingSeverity
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 GSB_URL = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@ttl_cache(ttl=600, show_spinner=False)
 def query_virustotal(url: str, api_key: str, max_wait: int = 25) -> dict[str, Any]:
     """
     Submits or retrieves analysis results from VirusTotal v3 API.
     Cached for 10 minutes.
     """
-    if not api_key.strip():
+    cleaned_key = api_key.strip()
+    if not cleaned_key:
         raise ValueError("Empty VirusTotal API key")
 
-    headers = {"x-apikey": api_key.strip()}
+    headers = {"x-apikey": cleaned_key}
     # VirusTotal v3 URL ID is base64 representation without padding '='
     url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
 
     # 1. Check if URL was previously scanned
     resp = requests.get(f"{VT_BASE}/urls/{url_id}", headers=headers, timeout=12)
     if resp.status_code == 200:
-        return resp.json()["data"]["attributes"]["last_analysis_stats"]
+        return resp.json().get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
     elif resp.status_code not in (404,):
         resp.raise_for_status()
 
     # 2. Submit URL for scanning if not found
     submit = requests.post(f"{VT_BASE}/urls", headers=headers, data={"url": url}, timeout=12)
     submit.raise_for_status()
-    analysis_id = submit.json()["data"]["id"]
+    analysis_id = submit.json().get("data", {}).get("id")
+    if not analysis_id:
+        raise ValueError("No analysis ID returned by VirusTotal")
 
     # 3. Poll for analysis completion
     deadline = time.time() + max_wait
@@ -49,20 +52,21 @@ def query_virustotal(url: str, api_key: str, max_wait: int = 25) -> dict[str, An
         time.sleep(2.5)
         poll = requests.get(f"{VT_BASE}/analyses/{analysis_id}", headers=headers, timeout=12)
         poll.raise_for_status()
-        attrs = poll.json()["data"]["attributes"]
+        attrs = poll.json().get("data", {}).get("attributes", {})
         if attrs.get("status") == "completed":
             return attrs.get("stats", {})
 
     raise TimeoutError("VirusTotal analysis did not complete within the timeout threshold.")
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@ttl_cache(ttl=600, show_spinner=False)
 def query_google_safe_browsing(url: str, api_key: str) -> list[dict[str, Any]]:
     """
     Queries Google Safe Browsing v4 threat matches.
     Cached for 10 minutes.
     """
-    if not api_key.strip():
+    cleaned_key = api_key.strip()
+    if not cleaned_key:
         raise ValueError("Empty Google Safe Browsing API key")
 
     body = {
@@ -79,7 +83,7 @@ def query_google_safe_browsing(url: str, api_key: str) -> list[dict[str, Any]]:
             "threatEntries": [{"url": url}],
         },
     }
-    resp = requests.post(GSB_URL, params={"key": api_key.strip()}, json=body, timeout=12)
+    resp = requests.post(GSB_URL, params={"key": cleaned_key}, json=body, timeout=12)
     resp.raise_for_status()
     return resp.json().get("matches", [])
 

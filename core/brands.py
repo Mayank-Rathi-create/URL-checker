@@ -1,5 +1,7 @@
 """
 Brand registry, reputational whitelists, and threat signatures.
+Contains curated datasets of verified domains, lookalike targets,
+and common link abuse patterns.
 """
 
 from __future__ import annotations
@@ -148,7 +150,7 @@ PHISHING_KEYWORDS: set[str] = {
     "invoice", "receipt", "payment", "authenticate", "validation", "recover",
 }
 
-# Dangerous executable / payload file extensions masquarading in URLs
+# Dangerous executable / payload file extensions masquerading in URLs
 DANGEROUS_EXTENSIONS: set[str] = {
     ".exe", ".scr", ".bat", ".cmd", ".vbs", ".js", ".msi", ".jar",
     ".apk", ".pif", ".hta", ".iso", ".dmg", ".sh", ".ps1", ".wsf",
@@ -170,3 +172,24 @@ SOURCES: dict[str, tuple[int, str]] = {
     "Unsolicited email, SMS, or QR code": (15, "Unexpected messages are the #1 delivery method for phishing campaigns."),
     "Unknown or suspicious sender": (25, "High risk: Never blindly trust links originating from unknown contacts."),
 }
+
+
+# Domain Lookup Helpers
+def get_official_brand(registered_domain: str) -> str | None:
+    """Returns the brand name if the domain matches a verified official domain."""
+    reg = registered_domain.lower()
+    for brand, domains in OFFICIAL_DOMAINS.items():
+        if reg in domains:
+            return brand
+    return None
+
+
+def is_reputable_domain(registered_domain: str) -> bool:
+    """Checks whether the domain belongs to the curated reputable institutions list."""
+    return registered_domain.lower() in REPUTABLE_DOMAINS
+
+
+def is_url_shortener(host_or_domain: str) -> bool:
+    """Checks if the given host or registered domain is a known URL shortening service."""
+    target = host_or_domain.lower()
+    return target in URL_SHORTENERS

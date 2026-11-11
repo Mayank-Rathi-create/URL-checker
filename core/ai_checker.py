@@ -28,12 +28,10 @@ DEFAULT_USER_AGENT = "URLSafetyChecker/2.0 (+https://github.com/)"
 def _extract_json_from_text(text: str) -> dict[str, Any]:
     """Safely extracts a JSON dictionary from raw model text."""
     text = text.strip()
-    # Remove markdown code block fences if present
     match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if match:
         text = match.group(1)
     else:
-        # Try finding first { and last }
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1 and end > start:
@@ -221,11 +219,12 @@ def query_domain_intelligence(domain: str) -> dict[str, Any]:
             for entity in data.get("entities", []):
                 roles = entity.get("roles", [])
                 if "registrar" in roles or "sponsor" in roles:
-                    vcard = entity.get("vcardArray", [None, []])[1]
-                    for entry in vcard:
-                        if entry and entry[0] == "fn":
-                            result["registrar"] = entry[3]
-                            break
+                    vcard_array = entity.get("vcardArray")
+                    if isinstance(vcard_array, list) and len(vcard_array) >= 2 and isinstance(vcard_array[1], list):
+                        for entry in vcard_array[1]:
+                            if isinstance(entry, list) and len(entry) >= 4 and entry[0] == "fn":
+                                result["registrar"] = str(entry[3])
+                                break
     except Exception as exc:
         result["rdap_error"] = str(exc)
 
@@ -316,75 +315,77 @@ def apply_ai_verification(
     if not clean_domain:
         return
 
-    findings_summary = [
-        {"level": f.level.value, "title": f.title, "points": f.points}
-        for f in analysis.findings
-    ]
-    findings_json = json.dumps(findings_summary, indent=2)
-
     ai_result: AIVerificationResult | None = None
     has_llm_key = bool(api_key and api_key.strip())
 
-    # Option 1: Google Gemini (if selected or auto with key)
-    if (provider == "gemini" and has_llm_key) or (provider == "auto" and has_llm_key):
-        try:
-            m = model or "gemini-1.5-flash"
-            data = query_gemini_verification(
-                url=analysis.url,
-                registered_domain=clean_domain,
-                path=analysis.anatomy.path,
-                query=analysis.anatomy.query,
-                findings_json=findings_json,
-                api_key=api_key,
-                model=m,
-            )
-            v = str(data.get("verdict", "SAFE")).upper()
-            ai_result = AIVerificationResult(
-                status=v,
-                model_name=f"Google Gemini ({m})",
-                summary=data.get("summary", "Verified by Google Gemini."),
-                domain_identity=data.get("domain_identity", clean_domain),
-                confidence=int(data.get("confidence", 95)),
-                reasoning=list(data.get("reasoning", [])),
-                is_verified_safe=(v == "SAFE"),
-            )
-        except Exception as exc:
-            analysis.scanner_notes.append(f"Gemini AI verification error: {exc}")
+    # Build findings JSON only when querying external LLMs
+    if has_llm_key and provider != "autonomous":
+        findings_summary = [
+            {"level": f.level.value, "title": f.title, "points": f.points}
+            for f in analysis.findings
+        ]
+        findings_json = json.dumps(findings_summary, indent=2)
 
-    # Option 2: OpenAI / Groq (if selected and key provided)
-    elif provider in ("openai", "groq") and has_llm_key:
-        try:
-            if provider == "groq":
-                endpoint = "https://api.groq.com/openai/v1/chat/completions"
-                m = model or "llama-3.3-70b-versatile"
-                lbl = f"Groq ({m})"
-            else:
-                endpoint = "https://api.openai.com/v1/chat/completions"
-                m = model or "gpt-4o-mini"
-                lbl = f"OpenAI ({m})"
+        # Option 1: Google Gemini (if selected or auto with key)
+        if provider in ("gemini", "auto"):
+            try:
+                m = model or "gemini-1.5-flash"
+                data = query_gemini_verification(
+                    url=analysis.url,
+                    registered_domain=clean_domain,
+                    path=analysis.anatomy.path,
+                    query=analysis.anatomy.query,
+                    findings_json=findings_json,
+                    api_key=api_key,
+                    model=m,
+                )
+                v = str(data.get("verdict", "SAFE")).upper()
+                ai_result = AIVerificationResult(
+                    status=v,
+                    model_name=f"Google Gemini ({m})",
+                    summary=data.get("summary", "Verified by Google Gemini."),
+                    domain_identity=data.get("domain_identity", clean_domain),
+                    confidence=int(data.get("confidence", 95)),
+                    reasoning=list(data.get("reasoning", [])),
+                    is_verified_safe=(v == "SAFE"),
+                )
+            except Exception as exc:
+                analysis.scanner_notes.append(f"Gemini AI verification error: {exc}")
 
-            data = query_openai_compatible_verification(
-                url=analysis.url,
-                registered_domain=clean_domain,
-                path=analysis.anatomy.path,
-                query=analysis.anatomy.query,
-                findings_json=findings_json,
-                api_key=api_key,
-                endpoint=endpoint,
-                model=m,
-            )
-            v = str(data.get("verdict", "SAFE")).upper()
-            ai_result = AIVerificationResult(
-                status=v,
-                model_name=lbl,
-                summary=data.get("summary", f"Verified by {lbl}."),
-                domain_identity=data.get("domain_identity", clean_domain),
-                confidence=int(data.get("confidence", 95)),
-                reasoning=list(data.get("reasoning", [])),
-                is_verified_safe=(v == "SAFE"),
-            )
-        except Exception as exc:
-            analysis.scanner_notes.append(f"AI verification error ({provider}): {exc}")
+        # Option 2: OpenAI / Groq (if selected and key provided)
+        elif provider in ("openai", "groq"):
+            try:
+                if provider == "groq":
+                    endpoint = "https://api.groq.com/openai/v1/chat/completions"
+                    m = model or "llama-3.3-70b-versatile"
+                    lbl = f"Groq ({m})"
+                else:
+                    endpoint = "https://api.openai.com/v1/chat/completions"
+                    m = model or "gpt-4o-mini"
+                    lbl = f"OpenAI ({m})"
+
+                data = query_openai_compatible_verification(
+                    url=analysis.url,
+                    registered_domain=clean_domain,
+                    path=analysis.anatomy.path,
+                    query=analysis.anatomy.query,
+                    findings_json=findings_json,
+                    api_key=api_key,
+                    endpoint=endpoint,
+                    model=m,
+                )
+                v = str(data.get("verdict", "SAFE")).upper()
+                ai_result = AIVerificationResult(
+                    status=v,
+                    model_name=lbl,
+                    summary=data.get("summary", f"Verified by {lbl}."),
+                    domain_identity=data.get("domain_identity", clean_domain),
+                    confidence=int(data.get("confidence", 95)),
+                    reasoning=list(data.get("reasoning", [])),
+                    is_verified_safe=(v == "SAFE"),
+                )
+            except Exception as exc:
+                analysis.scanner_notes.append(f"AI verification error ({provider}): {exc}")
 
     # Fallback / Autonomous Domain Intelligence (Zero-config dynamic verification)
     if not ai_result:

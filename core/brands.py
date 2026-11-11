@@ -112,8 +112,9 @@ OFFICIAL_DOMAINS: dict[str, set[str]] = {
 }
 
 # Curated set of reputable global domains for educational/news/tech institutions
+# (Excludes domains already tracked under OFFICIAL_DOMAINS)
 REPUTABLE_DOMAINS: set[str] = {
-    "wikipedia.org", "wikimedia.org", "w3.org", "ietf.org", "archive.org",
+    "w3.org", "ietf.org", "archive.org",
     "stackoverflow.com", "stackexchange.com", "superuser.com",
     "medium.com", "dev.to", "hashnode.com", "substack.com",
     "nytimes.com", "bbc.com", "bbc.co.uk", "cnn.com", "reuters.com",

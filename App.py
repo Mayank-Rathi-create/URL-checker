@@ -42,14 +42,6 @@ def get_secret_or_env(key_name: str) -> str:
     return os.environ.get(key_name, "").strip()
 
 
-def init_session_state() -> None:
-    """Initializes persistent application session variables."""
-    if "url_input" not in st.session_state:
-        st.session_state["url_input"] = ""
-    if "last_analysis" not in st.session_state:
-        st.session_state["last_analysis"] = None
-
-
 def render_sidebar_settings() -> tuple[bool, str, str, str, str]:
     """
     Renders AI verification and external threat scanner controls in the sidebar.
@@ -93,11 +85,11 @@ def render_sidebar_settings() -> tuple[bool, str, str, str, str]:
         if ai_provider_code != "autonomous":
             user_ai_key = st.text_input(
                 "AI API Key (Optional)",
-                value=st.session_state.get("user_ai_key", suggested_key),
+                value=suggested_key,
                 type="password",
+                key=f"api_key_input_{ai_provider_code}",
                 help="Paste your Google Gemini, OpenAI, or Groq API key. Stored only in your current session.",
             )
-            st.session_state["user_ai_key"] = user_ai_key
             st.markdown(
                 """
                 <span style="font-size:0.78rem; color:#94A3B8;">
@@ -127,12 +119,6 @@ def render_sidebar_settings() -> tuple[bool, str, str, str, str]:
     return enable_ai, ai_provider_code, user_ai_key, vt_key, gsb_key
 
 
-def handle_clear() -> None:
-    """Resets the input text and clears cached analysis."""
-    st.session_state["url_input"] = ""
-    st.session_state["last_analysis"] = None
-
-
 def main() -> None:
     st.set_page_config(
         page_title="URL Safety Checker with AI Intelligence",
@@ -140,7 +126,10 @@ def main() -> None:
         initial_sidebar_state="expanded",
     )
 
-    init_session_state()
+    if "url_input" not in st.session_state:
+        st.session_state["url_input"] = ""
+    if "last_analysis" not in st.session_state:
+        st.session_state["last_analysis"] = None
 
     # Sidebar: AI & Threat Intelligence Configuration
     enable_ai, ai_provider_code, user_ai_key, vt_key, gsb_key = render_sidebar_settings()
@@ -166,7 +155,12 @@ def main() -> None:
         with col_submit:
             submitted = st.form_submit_button("Check URL", type="primary", use_container_width=True)
         with col_clear:
-            st.form_submit_button("Clear", on_click=handle_clear, use_container_width=True)
+            cleared = st.form_submit_button("Clear", use_container_width=True)
+
+    if cleared:
+        st.session_state["url_input"] = ""
+        st.session_state["last_analysis"] = None
+        st.rerun()
 
     current_analysis: Analysis | None = None
 

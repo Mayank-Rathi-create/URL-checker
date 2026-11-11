@@ -10,16 +10,14 @@ import difflib
 import re
 from urllib.parse import parse_qs, unquote
 
-from .anatomy import is_obfuscated_or_raw_ip, normalize_input_url, parse_url_anatomy
+from .anatomy import normalize_input_url, parse_url_anatomy
 from .brands import (
     DANGEROUS_EXTENSIONS,
     OFFICIAL_DOMAINS,
     OPEN_REDIRECT_PARAMS,
     PHISHING_KEYWORDS,
-    REPUTABLE_DOMAINS,
     SOURCES,
     SUSPICIOUS_TLDS,
-    URL_SHORTENERS,
     get_official_brand,
     is_reputable_domain,
     is_url_shortener,
@@ -45,7 +43,13 @@ def find_brand_impersonation(host: str, registered_domain: str, path: str) -> tu
     """
     host_lower = host.lower()
     reg_lower = registered_domain.lower()
+    path_lower = path.lower()
     tokens = [t for t in re.split(r"[.\-_/]", host_lower) if len(t) >= 3]
+
+    # Pre-compute domain labels once outside the brand loop
+    reg_labels = reg_lower.split(".")
+    main_label = reg_labels[0] if len(reg_labels) >= 2 else ""
+    norm_main = normalize_leetspeak(main_label) if main_label else ""
 
     candidates: list[tuple[str, str, int]] = []
 
@@ -57,11 +61,7 @@ def find_brand_impersonation(host: str, registered_domain: str, path: str) -> tu
         primary_official = sorted(domains)[0]
 
         # 1. Exact brand in registered domain label (e.g. paypal-security.com or verify-paypal.net)
-        reg_labels = reg_lower.split(".")
-        if len(reg_labels) >= 2:
-            main_label = reg_labels[0]
-            norm_main = normalize_leetspeak(main_label)
-
+        if main_label:
             # Lookalike spelling (e.g., paypa1, rnicrosoft, googIe)
             if norm_main == brand and main_label != brand:
                 candidates.append((
@@ -105,7 +105,6 @@ def find_brand_impersonation(host: str, registered_domain: str, path: str) -> tu
             ))
 
         # 3. Brand in path for untrusted domain (e.g., sketchy.com/paypal/signin)
-        path_lower = path.lower()
         if f"/{brand}/" in path_lower or path_lower.endswith(f"/{brand}"):
             candidates.append((
                 brand,
@@ -210,24 +209,25 @@ def _check_authority_and_credentials(anatomy: URLAnatomy, result: Analysis) -> N
 
 def _check_ip_destination(anatomy: URLAnatomy, result: Analysis) -> None:
     """Checks whether the destination is a raw IP or obfuscated numeric address."""
-    if anatomy.is_ip:
+    if not anatomy.is_ip:
+        return
+
+    if anatomy.ip_detail.startswith("Obfuscated"):
+        result.add(
+            FindingSeverity.BAD,
+            "Obfuscated IP Representation",
+            f"The hostname uses an obfuscated integer/hexadecimal IP notation: {anatomy.ip_detail}.",
+            category="identity",
+            points=50,
+        )
+    else:
         result.add(
             FindingSeverity.BAD,
             "Direct IP Address Destination",
-            f"The link points to a raw or obfuscated numerical IP ({anatomy.host}) rather than a named domain. Legitimate consumer services virtually always use branded domains.",
+            f"The link points to a raw or numerical IP ({anatomy.host}) rather than a named domain. Legitimate consumer services virtually always use branded domains.",
             category="identity",
             points=40,
         )
-    else:
-        is_obf, obf_detail = is_obfuscated_or_raw_ip(anatomy.host)
-        if is_obf:
-            result.add(
-                FindingSeverity.BAD,
-                "Obfuscated IP Representation",
-                f"The hostname uses an obfuscated integer/hexadecimal IP notation: {obf_detail}.",
-                category="identity",
-                points=50,
-            )
 
 
 def _check_port_anomalies(anatomy: URLAnatomy, result: Analysis) -> None:

@@ -49,16 +49,20 @@ def normalize_input_url(raw: str) -> tuple[str, bool]:
     Cleans raw input URL and ensures an appropriate scheme is present.
     Returns (cleaned_url, scheme_was_assumed).
     """
-    text = raw.strip()
-    # Strip wrapping quotes or brackets often copied from logs or emails
-    text = text.strip("<>\"'[]`")
+    text = raw.strip().strip("<>\"'[]`")
+    if not text:
+        return "", False
 
     risky_schemes = ("javascript:", "data:", "vbscript:", "file:", "mailto:", "blob:")
     if any(text.lower().startswith(s) for s in risky_schemes):
         return text, False
 
+    if text.startswith("//"):
+        return f"https:{text}", True
+
     if "://" not in text:
         return f"https://{text}", True
+
     return text, False
 
 
@@ -67,6 +71,9 @@ def is_obfuscated_or_raw_ip(host: str) -> tuple[bool, str]:
     Detects if the host is a standard IPv4/IPv6 address or an obfuscated IP
     (e.g. hex 0x7f000001, octal 0177.0.0.1, or dword 2130706433).
     """
+    if not host:
+        return False, ""
+
     # 1. Standard IP test
     try:
         ip_obj = ipaddress.ip_address(host)
@@ -113,6 +120,9 @@ def inspect_homoglyphs(host: str) -> tuple[bool, str, list[dict]]:
     Decodes IDNA punycode and inspects for spoofed characters (homoglyphs).
     Returns (is_punycode_or_mixed, decoded_host, list_of_detected_homoglyphs).
     """
+    if not host:
+        return False, "", []
+
     is_punycode = "xn--" in host.lower()
     decoded_host = host
 
@@ -133,7 +143,7 @@ def inspect_homoglyphs(host: str) -> tuple[bool, str, list[dict]]:
                 "mimics": target_latin,
                 "description": desc,
             })
-        elif not ch.isascii() and ch not in (".", "-"):
+        elif not ch.isascii():
             homoglyphs.append({
                 "index": idx,
                 "char": ch,
@@ -171,7 +181,7 @@ def parse_url_anatomy(raw_url: str) -> URLAnatomy:
     has_creds = bool(parsed.username or parsed.password or ("@" in parsed.netloc))
 
     # IP detection
-    is_ip, _ip_details = is_obfuscated_or_raw_ip(host)
+    is_ip, ip_detail = is_obfuscated_or_raw_ip(host)
 
     # TLD extraction
     if is_ip:
@@ -204,6 +214,7 @@ def parse_url_anatomy(raw_url: str) -> URLAnatomy:
         fragment=parsed.fragment or "",
         has_credentials=has_creds,
         is_ip=is_ip,
+        ip_detail=ip_detail,
         is_punycode=is_puny,
         decoded_host=decoded_host,
         homoglyphs=homoglyphs,

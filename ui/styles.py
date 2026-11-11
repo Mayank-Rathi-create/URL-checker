@@ -15,30 +15,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ASSETS_DIR = BASE_DIR / "assets"
 
 
-@functools.lru_cache(maxsize=1)
-def get_safe_bg_b64() -> str:
-    path = ASSETS_DIR / "safe_bg.png"
-    if path.exists():
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    return ""
-
-
-@functools.lru_cache(maxsize=1)
-def get_danger_bg_b64() -> str:
-    path = ASSETS_DIR / "danger_bg.png"
-    if path.exists():
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    return ""
-
-
-@functools.lru_cache(maxsize=1)
-def get_main_bg_b64() -> str:
-    path = ASSETS_DIR / "main_bg.jpg"
-    if path.exists():
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
+@functools.lru_cache(maxsize=4)
+def _load_asset_b64(filename: str) -> str:
+    """Reads and base64-encodes an image asset with in-memory caching."""
+    path = ASSETS_DIR / filename
+    if path.is_file():
+        return base64.b64encode(path.read_bytes()).decode("utf-8")
     return ""
 
 
@@ -48,7 +30,7 @@ def get_theme_css(threat_level: str | None = None) -> str:
     threat_level can be 'Safe', 'Moderate', 'Danger', or None.
     """
     if threat_level == "Safe":
-        safe_b64 = get_safe_bg_b64()
+        safe_b64 = _load_asset_b64("safe_bg.png")
         if safe_b64:
             bg_css = f"""
             background-color: #05140B !important;
@@ -61,7 +43,7 @@ def get_theme_css(threat_level: str | None = None) -> str:
         else:
             bg_css = "background-image: radial-gradient(ellipse at 50% -10%, rgba(16, 185, 129, 0.22) 0%, #0B0F19 70%) !important;"
     elif threat_level == "Danger":
-        danger_b64 = get_danger_bg_b64()
+        danger_b64 = _load_asset_b64("danger_bg.png")
         if danger_b64:
             bg_css = f"""
             background-color: #150608 !important;
@@ -90,7 +72,7 @@ def get_theme_css(threat_level: str | None = None) -> str:
         background-attachment: fixed !important;
         """
     else:
-        main_b64 = get_main_bg_b64()
+        main_b64 = _load_asset_b64("main_bg.jpg")
         if main_b64:
             bg_css = f"""
             background-color: #060D1A !important;
@@ -110,30 +92,6 @@ def get_theme_css(threat_level: str | None = None) -> str:
     return f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-    :root {{
-        --bg-main: #0B0F19;
-        --bg-card: #111827;
-        --bg-card-sec: #161F30;
-        --border-color: rgba(255, 255, 255, 0.08);
-        --border-highlight: rgba(56, 189, 248, 0.35);
-        --text-primary: #F8FAFC;
-        --text-secondary: #94A3B8;
-        --text-muted: #64748B;
-        --accent-blue: #38BDF8;
-        --accent-indigo: #6366F1;
-        --pill-bg: #161F30;
-        --pill-border: rgba(255, 255, 255, 0.12);
-        --safe-bg: rgba(16, 185, 129, 0.14);
-        --safe-border: #10B981;
-        --safe-text: #34D399;
-        --warn-bg: rgba(245, 158, 11, 0.14);
-        --warn-border: #F59E0B;
-        --warn-text: #FBBF24;
-        --danger-bg: rgba(239, 68, 68, 0.14);
-        --danger-border: #EF4444;
-        --danger-text: #F87171;
-    }}
 
     /* Sidebar Styling */
     section[data-testid="stSidebar"] {{

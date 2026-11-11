@@ -27,6 +27,16 @@ class TestURLAnatomy(unittest.TestCase):
         self.assertEqual(url, "http://example.com/test")
         self.assertFalse(assumed)
 
+    def test_normalize_protocol_relative(self) -> None:
+        url, assumed = normalize_input_url("//example.com/test")
+        self.assertEqual(url, "https://example.com/test")
+        self.assertTrue(assumed)
+
+    def test_normalize_empty_url(self) -> None:
+        url, assumed = normalize_input_url("   ")
+        self.assertEqual(url, "")
+        self.assertFalse(assumed)
+
     def test_normalize_strips_brackets_quotes(self) -> None:
         url, assumed = normalize_input_url("<https://example.com/path>")
         self.assertEqual(url, "https://example.com/path")
@@ -57,17 +67,27 @@ class TestURLAnatomy(unittest.TestCase):
         self.assertTrue(is_ip)
         self.assertIn("Obfuscated Octal IP", detail)
 
+    def test_empty_host_not_ip(self) -> None:
+        is_ip, detail = is_obfuscated_or_raw_ip("")
+        self.assertFalse(is_ip)
+        self.assertEqual(detail, "")
+
     def test_standard_hostname_not_ip(self) -> None:
         is_ip, _ = is_obfuscated_or_raw_ip("google.com")
         self.assertFalse(is_ip)
 
     def test_homoglyph_detection(self) -> None:
-        # Cyrillic 'а' in paypal
         has_deception, decoded, homoglyphs = inspect_homoglyphs("p\u0430ypal.com")
         self.assertTrue(has_deception)
         self.assertGreater(len(homoglyphs), 0)
         self.assertEqual(homoglyphs[0]["char"], "\u0430")
         self.assertEqual(homoglyphs[0]["mimics"], "a")
+
+    def test_empty_host_homoglyphs(self) -> None:
+        has_deception, decoded, homoglyphs = inspect_homoglyphs("")
+        self.assertFalse(has_deception)
+        self.assertEqual(decoded, "")
+        self.assertEqual(homoglyphs, [])
 
     def test_parse_url_anatomy_components(self) -> None:
         anatomy = parse_url_anatomy("https://sub.portal.example.com:8443/auth/login?ref=123#top")
@@ -83,8 +103,8 @@ class TestURLAnatomy(unittest.TestCase):
         self.assertEqual(anatomy.fragment, "top")
         self.assertFalse(anatomy.has_credentials)
         self.assertFalse(anatomy.is_ip)
+        self.assertEqual(anatomy.ip_detail, "")
 
 
 if __name__ == "__main__":
     unittest.main()
-

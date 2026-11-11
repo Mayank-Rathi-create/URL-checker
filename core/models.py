@@ -59,6 +59,7 @@ class URLAnatomy:
     fragment: str = ""
     has_credentials: bool = False
     is_ip: bool = False
+    ip_detail: str = ""
     is_punycode: bool = False
     decoded_host: str = ""
     homoglyphs: list[dict[str, Any]] = field(default_factory=list)
@@ -73,7 +74,6 @@ class AIVerificationResult:
     domain_identity: str = ""
     confidence: int = 0
     reasoning: list[str] = field(default_factory=list)
-    raw_response: str = ""
     is_verified_safe: bool = False
 
 
@@ -109,7 +109,6 @@ class Analysis:
     def score(self) -> int:
         """Normalized overall risk score between 0 and 100."""
         raw_sum = sum(f.points for f in self.findings)
-        # Cap score between 0 and 100
         return max(0, min(100, raw_sum))
 
     @property
@@ -120,7 +119,7 @@ class Analysis:
             return ThreatLevel.DANGER
         if score >= 20:
             return ThreatLevel.MODERATE
-        
+
         # When score is low (0-19):
         # Site is verified if it's an official brand domain, a known reputable domain,
         # clean in scanners, verified by AI, or verified by dynamic domain intelligence.
@@ -132,7 +131,6 @@ class Analysis:
             or self.is_domain_established
         )
         if not is_verified:
-            # Low risk heuristics, but not on verified directory
             return ThreatLevel.MODERATE
         return ThreatLevel.SAFE
 
@@ -181,4 +179,3 @@ class Analysis:
             "Safe & Verified",
             "No red flags detected, and the destination matches an authentic, reputable service."
         )
-
